@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "sourcePatch": "16.12",
+    "tftPatch": "17.5"
+  },
+  "items": [
+    {
+      "apiName": "TFT_Item_GuinsoosRageblade",
+      "zhName": "鬼索旧名",
+      "enName": "Guinsoo's Rageblade",
+      "sourcePatch": "16.12",
+      "traceabilityStatus": "official_zh_cn"
+    },
+    {
+      "apiName": "TFT_Item_Artifact_CappaJuice",
+      "zhName": "帽子饮品",
+      "enName": "Cappa Juice",
+      "sourcePatch": "16.12",
+      "traceabilityStatus": "official_zh_cn"
+    }
+  ]
+}

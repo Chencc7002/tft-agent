@@ -112,12 +112,21 @@
   - 可从 MetaTFT `/tft-explorer-api/items` 的 `{ data: [...] }` 或 `{ results: [{ itemName, places }] }` 响应生成装备目录。
   - 自动分类普通成装、组件、光明、神器、转职/纹章、辅助/战术家、Set 特殊、legacy/removed、unknown。
   - 生成目录会与本地中文种子别名合并，保留“羊刀/火炮/RFC/分裂弓”等高频别名。
-  - 新增 `src/data/item-alias-overrides.js` 作为高置信装备中文名/俗称维护文件，可给动态 item API id 补 `zhName`、`shortName`、aliases、source 和 confidence；当前覆盖法爆、泰坦、饮血、蓝 buff、反甲、龙牙、石像鬼、离子、鬼书、帽子、红 buff、电刀、血手、狂徒、大天使、组件、自然之力、正义、日炎、复活甲、鱼骨头、巫妖、卢登、纳沃利、暗爪、三相、死亡之舞、金身等常见入口。`TFT_Item_Artifact_CappaJuice` 已按 Riot 英文补丁说明加入高置信 `Cappa Juice` 英文入口，但未伪造简中译名。
+  - 新增 `src/data/item-alias-overrides.js` 作为高置信装备俗称/缩写/历史别名维护文件，可给动态 item API id 补 `shortName`、aliases、source 和 confidence；当前覆盖法爆、泰坦、饮血、蓝 buff、反甲、龙牙、石像鬼、离子、鬼书、帽子、红 buff、电刀、血手、狂徒、大天使、组件、自然之力、正义、日炎、复活甲、鱼骨头、巫妖、卢登、纳沃利、暗爪、三相、死亡之舞、金身等常见入口。旧有人工 `zhName` 仍作为 alias/冲突记录输入，不再高于官方 canonical 名。
   - 新增 item catalog 派生别名：`TFT17_Item_*EmblemItem` 会从当前羁绊字典自动生成“纹章/转/转职”入口；缺少 trait 映射的纹章会保留英文 token 兜底（如 `Pulsefire Emblem`），不伪造中文名；`TFT5_Item_*Radiant` 会从普通装备别名自动生成“光明 + 装备名/俗称”入口，例如“暗星转”“观星者纹章”“光明蓝 buff”“光明泰坦”；Set17 幻灵战队装备、灵能特工改件、英雄专属神器和艾克异常道具也有 token-derived 中文兜底名，例如“战斗兔弩”“光明无人机改件”“阿狸神器”“艾克异常”。
   - 新增 `npm run audit:aliases`，默认读取本地 `.probe` 抓包审计当前 set 的英雄、羁绊、装备人工别名覆盖率，并可用 `--write` 生成 `CANDIDATE_*_ALIAS_OVERRIDES` 草稿；候选草稿只用于人工审核，不会自动写入主字典。
   - 新增 `src/data/item-availability-overrides.js` 作为按 patch 维护的显式装备可用性清单；清单优先级高于动态 MetaTFT 行、本地种子状态、目录合并结果和调用方附加 denylist，当前已记录需求文档明确的 `TFT_Item_RunaansHurricane` 当前版本移除规则，并保留 reason/source 审计信息。
   - 新增 `npm run audit:items`，检查显式清单的必填字段、重复项和冲突状态，并用当前 `.probe/meta_items_expanded.json` 与合成动态行验证规则最终落为 `removed_or_legacy && current=false && obtainable=false`。
   - 小窗成功刷新 `/items` 后会把合并后的当前 patch 装备目录写入持久化 store；刷新失败或返回空目录时优先恢复同 patch 快照，只有没有快照才退回种子字典。恢复快照后仍会重新应用 `item-availability-overrides`，旧快照不能把分裂弓等硬移除项重新放行。
+- 实现装备官方简中本地化与 patch 更新流水线：
+  - 采用腾讯《英雄联盟》官网 CDN `tft/js/equip.js` 的 `englishName -> name` 作为国服官方简中 canonical 映射；当前源元数据为 `version=16.13`、`season=2026.S17`、`time=2026-06-23 16:38:05`，对应 Riot 官方 TFT 17.6 公告周期。Riot Data Dragon 固定 `16.13.1/en_US/tft-item.json` 提供缺失简中时的官方英文回退。
+  - 已验证 Riot Data Dragon `zh_CN` 与 CommunityDragon `zh_cn/zh_my` 在当前版本的装备名称为 `????` 占位符，因此不会被当作有效中文来源。
+  - 新增 `src/data/generated/item-localization.zh-CN.json`，记录 URL、source patch、TFT patch、season、源更新时间、原始响应 SHA-256、置信度与追溯状态；2026-07-11 实时 MetaTFT `/items` 范围为 179 个 API ID，179/179 官方简中覆盖，待审 0；相对 `.probe` 的 178 行新增 `TFT17_AnimaSquadItem_Tier4_Omniweapon`。
+  - `item-catalog.js` 现在按 `apiName` 合并官方 canonical 名；人工 `shortName`/俗称仍优先用于紧凑小窗展示并保留解析兼容。官方名冲突时写入 `manualNameCandidate`；简中缺失或为问号占位符时使用 Riot 英文并标记 `official_en_fallback_pending_zh_cn`，不接受未经验证中文覆盖。
+  - `TFT_Item_Artifact_CappaJuice` 已从腾讯官网同 patch 目录确认简中为“帽子饮品”，并保留 Riot 英文 `Cappa Juice` 作为 alias 与英文证据。
+  - 新增 `npm run refresh:item-localization`；离线模式显式读取 fixture/本地源文件，可选 `npm run smoke:item-localization` 才进行网络请求。刷新会校验 source patch、season、Data Dragon version 与 TFT patch 配置，单元测试不依赖网络。
+  - 新增 `npm run audit:item-patch`，列出新增、MetaTFT 快照消失、缺失简中和名称变化。消失项仅记为 observation；未命中 `item-availability-overrides.js` 时必须人工复核，审计不会自动改变 current/obtainable。
+  - 新增离线 fixture 测试，覆盖官方本地化合并、人工短名/别名保留、英文回退待审、patch 变化审计，以及刷新/审计 CLI 的离线执行。
 - 实现 `placement_count` 本地计算：样本数、前四率、吃鸡率、平均名次。
 - 实现当前装备策略过滤：普通装备只允许 `ordinary_completed && current && obtainable`，分裂弓这类 legacy 会被剔除/提示。
   - 对“霞能不能带分裂弓？”这类已命中当前不可用装备清单的输入，会在 Default Context Builder 和 Explorer 之前直接返回本地 `unavailable_items` 裁决，不请求 `/comps` 或 `unit_builds`；有效英雄仍写入 `last_query`，后续追问可继承霞。
@@ -172,12 +181,15 @@ node --check src\app\small-window-ui\app.js
 node --check src\index.js
 
 npm test
-159 tests passed
+166 tests passed
 
 npm run smoke:small-window
 Small-window smoke checks passed.
-hot cache: 1ms (target <=100ms)
+hot cache: 2ms (target <=100ms)
 reopened JSON cache: 3ms (target <=300ms)
+
+npm run smoke:item-localization
+item localization refresh: patch=17.6, source=16.13, items=179, localized=179, missing=0
 
 npm run smoke:visual
 standalone command skips without a project Playwright dependency; desktop Browser Playwright validation passed for 460px recommendation, 360px low-sample, and 360px empty-result states
@@ -207,6 +219,11 @@ items: 169/169 covered, missing=0
 
 npm run audit:items
 item availability overrides: total=1, patch=current, applicable=1, observed=1
+
+npm run audit:item-patch
+previous=178, current=179
+added=1 (`TFT17_AnimaSquadItem_Tier4_Omniweapon`), removed=0, missingLocalization=0, nameChanges=0
+availabilityPolicy=item-availability-overrides-only
 ```
 
 最近一次实时 smoke 结果显示：
@@ -237,7 +254,7 @@ item availability overrides: total=1, patch=current, applicable=1, observed=1
 - 当用户把阈值降到 10、最高组合只有 18 场时，结果卡标题为“低样本参考”、`winner=false`，文本明确“仅供参考，不作稳定推荐”；装备比较即使都超过 10 场，只要未达到 200 场稳定门槛也不会给出胜出项。
 - 结果卡的上/下反馈按钮会向 `POST /api/feedback` 写入 `good_recommendation` / `bad_recommendation`；同一 `feedbackId` 重复或反向提交只保留第一条。测试确认未知原始响应字段不会落库，反馈前后长期偏好与推荐卡保持不变。
 - `npm run smoke:small-window` 会启动临时端口并验证小窗 API 主链路、候选入库/审核启用和清缓存流程。
-- 同一 smoke 会验证启动 catalog 预热入口、多英雄、冲突排序、缺失比较项和低置信已持有装备输入在请求 Explorer 前阻断，验证完整装备对比卡、显式排除装备、结果反馈幂等、光明装备锁定查询，并验证当前不可用装备直接本地裁决且不增加 Explorer 调用；同时使用真实 query-cache 写入路径检查热缓存 `<=100ms`，随后重新打开临时 JSON 文件缓存，确认不调用远程客户端且本地缓存 `<=300ms`。最近一次结果分别为 1ms 和 3ms，可通过 `SMOKE_HOT_CACHE_MAX_MS`、`SMOKE_LOCAL_CACHE_MAX_MS` 调整发布环境阈值。
+- 同一 smoke 会验证启动 catalog 预热入口、多英雄、冲突排序、缺失比较项和低置信已持有装备输入在请求 Explorer 前阻断，验证完整装备对比卡、显式排除装备、结果反馈幂等、光明装备锁定查询，并验证当前不可用装备直接本地裁决且不增加 Explorer 调用；同时使用真实 query-cache 写入路径检查热缓存 `<=100ms`，随后重新打开临时 JSON 文件缓存，确认不调用远程客户端且本地缓存 `<=300ms`。最近一次结果分别为 2ms 和 3ms，可通过 `SMOKE_HOT_CACHE_MAX_MS`、`SMOKE_LOCAL_CACHE_MAX_MS` 调整发布环境阈值。
 - `POST /api/recommend` 输入 `guinsoo` 返回结构化澄清：`reason=missing_unit_with_item`，问题为“你说的是 羊刀，要查哪个英雄？”。
 - UTF-8 中文请求 `霞带哪三件装备最好？` 可命中并返回结果。
 - 浏览器检查：桌面内置 Browser 的 Playwright API 使用与 `smoke:visual` 相同的离线 fixture 完整渲染 460px 推荐卡、360px 低样本卡和 360px 零结果摘要。首次检查发现传统滚动条会把 `width: min(100vw, 460px)` 的 `.shell` 挤出 15px；改为 `width: min(100%, 460px)` 后，页面、面板、分段控件、统计格均无横向溢出，按钮、装备名和统计文字均无裁切。
@@ -246,7 +263,7 @@ item availability overrides: total=1, patch=current, applicable=1, observed=1
 
 ## 当前限制
 
-- 装备 catalog 已能从 MetaTFT items 抓包生成，并已有高置信中文名/俗称覆盖文件、派生纹章/光明装备/Set 特殊装备/英雄专属神器别名和覆盖审计脚本；消耗品已归类为 `consumable` 并从装备别名审计范围剔除。当前 items 人工入口覆盖 169/169；其中 `TFT_Item_Artifact_CappaJuice` 仅确认并支持 Riot 官方英文名 `Cappa Juice`，尚无可靠简中本地化，不应把满覆盖率等同于全部具备官方中文名。
+- 装备 catalog 已能从 MetaTFT items 抓包生成，并已接入同 patch 的腾讯官网简中目录、Riot Data Dragon 英文回退、人工俗称覆盖、派生别名和覆盖审计。2026-07-11 实时动态装备为 179/179 官方简中，人工入口为 169/169；`TFT_Item_Artifact_CappaJuice` 已由腾讯官网 `version=16.13 / season=2026.S17` 确认为“帽子饮品”，同时保留 `Cappa Juice`。后续 patch 仍需重新刷新并审计，不能把本次满覆盖永久外推。
 - legacy/removed 判断已有分类规则和按 patch 的显式可用性清单，动态 API、种子目录、目录合并与调用方附加 denylist 都不能覆盖内置硬规则；当前清单只收录已由需求文档确认的 `TFT_Item_RunaansHurricane`，后续仍需在每次 set/patch 更新时运行 `npm run audit:items` 并人工维护新增移除项，不能凭 API token 猜测。
 - 英雄/羁绊 API id 已能从 Explorer 聚合端点和 `/comps` 抓包动态生成到当前 set，并按 patch 持久化到 JSON/SQLite；刷新失败时可按实体侧恢复动态快照，`latest_cluster_info` 单独成功也能继续补目录。已有高置信中文别名覆盖文件和覆盖审计脚本；当前 `.probe` 英雄人工别名覆盖 62/62，羁绊覆盖 100/100。英雄专属 trait 和观星子类型已用低/中置信 token-derived 中文兜底名覆盖，后续版本变更时仍需用审计脚本复核。
 - `Default Context Builder` 已能消费真实 `/comps` 抓包结构，支持样本/前四/score/均名四种默认阵容策略，并保留前 3 个候选阵容用于展示“狙神霞/观星霞”这类多候选默认上下文；候选羁绊形态不同会进入 warning。`/comp_builds` 已接入为目标英雄/目标 cluster 的辅助装备构建参考，但最终推荐仍以 Explorer `unit_builds` 和本地过滤/排序为准。当前 `/comp_options` 若没有前四率字段，前四策略会按 score、样本数、均名兜底。默认模式会排除 traits 带 `UniqueTrait` 或 `Augment` 的明确专属玩法 cluster，仅在没有普通候选时降级使用；显式输入专属强化、英雄强化、赌狗、D牌/D卡、追三或 `reroll` 时优先选择特殊候选，且选择模式会隔离默认阵容缓存。该模块已接入缓存接口；当 fresh `/comps` 数据可用时，已按 cluster 指纹校验并失效旧默认阵容。SQLite schema/store 起步版已实现，但小窗默认仍使用 JSON store。
@@ -261,8 +278,8 @@ item availability overrides: total=1, patch=current, applicable=1, observed=1
 ## 下一步建议
 
 1. 发布环境在默认 JSON 与 SQLite 间做最终选择；若启用 SQLite，优先固定 Node 22.5+/24，并用启动器 `-NodePath`、`-CacheStore sqlite` 和 `-CachePath` 做一次完整小窗启动验收。Node 18 路径则需要安装 `better-sqlite3`。
-2. 继续用 `npm run audit:aliases` 跟踪版本变化；当前 items 入口覆盖 169/169。后续若取得 `TFT_Item_Artifact_CappaJuice` 的可靠简中本地化，再补中文名/俗称；现阶段只保留已确认的官方英文 `Cappa Juice`。
-3. 版本更新后重新运行 `npm run audit:aliases -- --limit=40` 与 `npm run audit:items`，复核英雄 62/62、羁绊 100/100 和显式装备移除项是否仍成立；若 MetaTFT token、set id 或装备池变化，再补 `domain-alias-overrides.js` 与 `item-availability-overrides.js`。
+2. 版本更新时先更新 `item-localization-sources.js` 的 TFT/source/Data Dragon 对应关系，再运行 `npm run refresh:item-localization -- --remote` 或使用已下载源文件离线刷新，并保存上一版本 items/localization 快照供 `npm run audit:item-patch` 比较。
+3. 继续运行 `npm run audit:aliases -- --limit=40` 与 `npm run audit:items`，复核英雄 62/62、羁绊 100/100、人工装备入口 169/169 和显式装备移除项是否仍成立；MetaTFT 消失 token 只进入人工复核，确认后才修改 `item-availability-overrides.js`。
 4. 在按 catalog 复用的内存 BM25 + 稀疏 TF-IDF 索引基础上，评估后续是否接入跨进程持久化索引文件或稠密语义 embedding；候选仍必须走人工确认后才能进入主字典。
 5. 在 Windows 启动器基础上继续封装桌面体验：贴边吸附、托盘、透明/点击穿透，可评估 Electron、Tauri 或 WebView2。
 6. 将 `npm run smoke:small-window` 纳入默认发布前检查；`npm run smoke:metatft` 作为需要网络和非官方 API 稳定性的手动发布前检查，而不是默认 CI。

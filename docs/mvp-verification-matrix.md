@@ -20,6 +20,11 @@
 | 用户指定光明、神器、纹章和特殊装备 | 已验证 | `include_radiant`、`include_artifact`、`include_special` 端到端测试与小窗 smoke |
 | 当前版本不存在装备本地裁决 | 已验证 | `TFT_Item_RunaansHurricane` 显式可用性规则；“霞能不能带分裂弓”在 `/comps` 和 Explorer 前返回 `unavailable_items` |
 | 版本装备目录可持久化并在远程失败时恢复 | 已验证 | Memory/JSON/SQLite `item_catalog` 往返测试；同 patch 快照回退测试会重新应用本地移除硬规则，清查询历史不会删除目录 |
+| 动态装备 API ID 合并官方简中 canonical 名 | 已验证 | 腾讯官网 `equip.js` 的 `englishName -> name` 按 apiName 合并；当前 `version=16.13 / season=2026.S17` 快照覆盖实时 MetaTFT `/items` 179/179，待审 0 |
+| 官方名与人工别名职责和优先级 | 已验证 | 官方 `zhName/displayName` 优先；人工 `shortName`、俗称、缩写和历史别名保留；冲突写入 `manualNameCandidate`；离线合并测试通过 |
+| 缺失简中时只用权威英文回退 | 已验证 | `????`/空值会被拒绝，回退 Riot Data Dragon 英文并标记 `official_en_fallback_pending_zh_cn` / `nameNeedsReview=true`；未经验证人工中文不能成为 canonical 名 |
+| `Cappa Juice` 可追溯简中 | 已验证 | 腾讯官网同 patch 目录：`TFT_Item_Artifact_CappaJuice -> 帽子饮品`；Riot Data Dragon `16.13.1` 英文为 `Cappa Juice`，两者均保留来源字段 |
+| patch 装备变化审计不越权判定移除 | 已验证 | `audit:item-patch` 列出新增、消失、缺失简中和名称变化；消失 token 仅为 observation，除非命中 `item-availability-overrides.js`；fixture 覆盖显式/未确认两类消失项 |
 | 当前英雄/羁绊目录可持久化并独立降级 | 已验证 | Memory/JSON/SQLite `units`、`traits` 往返；Explorer/comps 失败时按实体侧恢复快照；`comp_options` 失败时 latest cluster 仍可生成目录 |
 | 样本阈值和三种排序 | 已验证 | 10/50/100/500/1000 UI；前四、吃鸡、稳健排序测试；冲突排序阻断测试 |
 | 多装备选项本地比较 | 已验证 | 选项分别聚合 `placement_count`，支持已持有装备+两个候选；小窗返回 winner、对比卡和代表三件套；任一候选低于稳定展示门槛时不下胜出结论，不可用候选零远端调用 |
@@ -62,7 +67,7 @@
 | 低样本风险与弱结论 | 已验证 | 小窗 API 18 场样本返回 `lowSample=true`、标题改为“低样本参考”且 `winner=false`；文本明确“仅供参考，不作稳定推荐”，比较项低于稳定门槛时 `winner=null` |
 | 460px/360px 响应式视觉状态 | 已验证 | 桌面内置 Browser 的 Playwright API 使用离线 fixture 实际渲染 460px 推荐态、360px 低样本态和 360px 零结果态；页面、面板、分段控件、统计格均无横向溢出或文字裁切，截图位于 `.cache/visual-smoke/` |
 | 快捷键唤起和常驻小窗入口 | 已验证 | Windows app-window 启动器、全局热键 smoke |
-| 热缓存 <=100ms | 已验证 | `npm run smoke:small-window` 最近结果 1ms |
+| 热缓存 <=100ms | 已验证 | `npm run smoke:small-window` 最近结果 2ms |
 | 本地持久缓存 <=300ms | 已验证 | JSON 文件缓存关闭重开后 3ms，且远程调用为 0 |
 | SQLite 真实文件和小窗运行时持久化 | 已验证 | Node 24.14.0 `node:sqlite` 创建 98,304 字节文件；`item_catalog`、`units`、`traits` 往返通过；关闭重开后 query cache hit=true、远程调用 0 |
 | 远端故障等待有界 | 已验证 | 小窗 Explorer、catalog、comps 默认超时均为 2200ms；支持环境变量/CLI 覆盖，`/api/runtime` 与设置面板展示核心查询边界；Abort timeout 不重试，过期缓存降级测试通过 |
@@ -72,9 +77,11 @@
 ## 当前外部条件
 
 - MetaTFT 是非官方接口。2026-07-11 实时 smoke 中 `items` 180 行（1120ms）、霞 `unit_builds` 600 行（495ms），核心查询通过；`/comps` 在 1842ms 内成功选择 cluster `409013`（样本 167）。这些是当前环境证据，不是硬 SLA。
+- Riot 官方 TFT 17.6 公告发布时间为 2026-06-23；腾讯官网装备目录声明 `version=16.13 / season=2026.S17 / time=2026-06-23 16:38:05`，Riot Data Dragon 固定英文版本为 `16.13.1`。`smoke:item-localization` 只作为可选网络检查，常规 `npm test` 使用离线 fixture。
+- Riot Data Dragon `zh_CN` 和 CommunityDragon 当前 `zh_cn/zh_my` 装备名为 `????` 占位符，不能作为简中 canonical 来源；当前采用腾讯官网国服目录。每次 patch 必须重新校验这些版本元数据和源 SHA-256。
 - 系统默认 Node 18.20.8 没有 `node:sqlite`，也未安装 `better-sqlite3`；该环境继续使用默认 JSON store。SQLite 发布可固定 Node 22.5+/24，或为 Node 18 安装 optional driver。
 - 独立 `npm run smoke:visual` 在未安装项目级 Playwright 时仍会明确跳过；本轮已通过桌面内置 Browser 的 Playwright API 完成同一离线 fixture 的真实渲染验收。验收首次发现 `.shell` 使用 `100vw` 时会被传统滚动条挤出 15px，改为父级可用宽度后，460px 推荐态和 360px 低样本/零结果态均通过。
-- set/patch 更新后仍必须运行 `npm run audit:aliases` 和 `npm run audit:items`，并人工确认新移除装备，不能仅凭 MetaTFT token 推断可用性。
+- set/patch 更新后仍必须运行 `refresh:item-localization`、`audit:item-patch`、`audit:aliases` 和 `audit:items`，并人工确认新移除装备，不能仅凭 MetaTFT token 推断可用性。
 
 ## 明确非 MVP
 

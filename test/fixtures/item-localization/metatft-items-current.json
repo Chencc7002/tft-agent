@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "items": "TFT_Item_GuinsoosRageblade", "placement_count": [1, 1, 1, 1, 1, 1, 1, 1] },
+    { "items": "TFT_Item_Artifact_CappaJuice", "placement_count": [1, 1, 1, 1, 1, 1, 1, 1] },
+    { "items": "TFT_Item_NewOfficial", "placement_count": [1, 1, 1, 1, 1, 1, 1, 1] },
+    { "items": "TFT_Item_MissingZh", "placement_count": [1, 1, 1, 1, 1, 1, 1, 1] }
+  ]
+}
