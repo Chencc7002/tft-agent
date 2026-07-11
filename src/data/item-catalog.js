@@ -5,6 +5,9 @@ import { traitAliasOverrideByApiName } from "./domain-alias-overrides.js";
 import {
   findItemAvailabilityOverride
 } from "./item-availability-overrides.js";
+import {
+  applyOfficialItemLocalization
+} from "./item-localization.js";
 
 const COMPONENT_ITEM_API_NAMES = new Set([
   "TFT_Item_BFSword",
@@ -381,7 +384,7 @@ function itemFromApiName(apiName, options = {}, dynamicSource = null) {
   const token = apiToken(apiName);
   const derived = deriveItemAlias(apiName, category);
 
-  return {
+  return applyOfficialItemLocalization({
     apiName,
     zhName: override?.zhName ?? seed?.zhName ?? derived?.zhName ?? null,
     shortName: override?.shortName ?? seed?.shortName ?? derived?.shortName ?? token,
@@ -413,7 +416,9 @@ function itemFromApiName(apiName, options = {}, dynamicSource = null) {
     availabilityOverride: Boolean(availabilityOverride),
     availabilityReason: availabilityOverride?.reason ?? null,
     availabilitySource: availabilityOverride?.source ?? null
-  };
+  }, {
+    localizationByApiName: options.localizationByApiName
+  });
 }
 
 export function buildItemCatalogFromItemsResponse(response, options = {}) {
@@ -452,5 +457,8 @@ export function mergeCatalogItems(baseItems, generatedItems, options = {}) {
   }
   return [...merged.values()]
     .map((item) => applyResolvedItemAvailability(item, options))
+    .map((item) => applyOfficialItemLocalization(item, {
+      localizationByApiName: options.localizationByApiName
+    }))
     .sort((a, b) => a.apiName.localeCompare(b.apiName));
 }

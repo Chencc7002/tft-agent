@@ -1,0 +1,22 @@
+{
+  "type": "tft-item",
+  "version": "16.13.1",
+  "data": {
+    "TFT_Item_GuinsoosRageblade": {
+      "id": "TFT_Item_GuinsoosRageblade",
+      "name": "Guinsoo's Rageblade"
+    },
+    "TFT_Item_Artifact_CappaJuice": {
+      "id": "TFT_Item_Artifact_CappaJuice",
+      "name": "Cappa Juice"
+    },
+    "TFT_Item_NewOfficial": {
+      "id": "TFT_Item_NewOfficial",
+      "name": "New Official Item"
+    },
+    "TFT_Item_MissingZh": {
+      "id": "TFT_Item_MissingZh",
+      "name": "Verified English Fallback"
+    }
+  }
+}

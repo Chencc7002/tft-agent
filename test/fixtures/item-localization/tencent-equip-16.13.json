@@ -1,0 +1,24 @@
+{
+  "version": "16.13",
+  "season": "2026.S17",
+  "modeId": "1",
+  "time": "2026-06-23 16:38:05",
+  "data": [
+    {
+      "name": "鬼索的狂暴之刃",
+      "englishName": "TFT_Item_GuinsoosRageblade"
+    },
+    {
+      "name": "帽子饮品",
+      "englishName": "TFT_Item_Artifact_CappaJuice"
+    },
+    {
+      "name": "新装备",
+      "englishName": "TFT_Item_NewOfficial"
+    },
+    {
+      "name": "????",
+      "englishName": "TFT_Item_MissingZh"
+    }
+  ]
+}

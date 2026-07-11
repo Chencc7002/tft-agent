@@ -1,4 +1,5 @@
 import { applyItemAvailabilityOverride } from "./item-availability-overrides.js";
+import { applyOfficialItemLocalization } from "./item-localization.js";
 import { applyPinyinAliases } from "./pinyin-aliases.js";
 
 export const DEFAULT_RANK_FILTER = [
@@ -158,9 +159,11 @@ export const ITEMS = [
 export function createCatalog(overrides = {}) {
   const units = (overrides.units ?? UNITS).map((unit) => applyPinyinAliases(unit, "unit"));
   const traits = (overrides.traits ?? TRAITS).map((trait) => applyPinyinAliases(trait, "trait"));
-  const items = (overrides.items ?? ITEMS).map((item) => applyItemAvailabilityOverride(
-    applyPinyinAliases(item, "item"), {
+  const items = (overrides.items ?? ITEMS).map((item) => applyOfficialItemLocalization(
+    applyItemAvailabilityOverride(applyPinyinAliases(item, "item"), {
       patch: overrides.patch ?? item.patch ?? "current"
+    }), {
+      localizationByApiName: overrides.localizationByApiName
     }
   ));
 

@@ -52,6 +52,17 @@ export {
   mergeCatalogItems
 } from "./data/item-catalog.js";
 export {
+  applyOfficialItemLocalization,
+  buildOfficialItemLocalizationCatalog,
+  createItemLocalizationMap,
+  CURRENT_ITEM_LOCALIZATION,
+  currentItemLocalizationByApiName,
+  isVerifiedLocalizationName,
+  mergeOfficialItemLocalization
+} from "./data/item-localization.js";
+export { CURRENT_ITEM_LOCALIZATION_SOURCE } from "./data/item-localization-sources.js";
+export { auditItemPatchChanges } from "./data/item-patch-audit.js";
+export {
   applyItemAvailabilityOverride,
   findItemAvailabilityOverride,
   ITEM_AVAILABILITY_OVERRIDES,
