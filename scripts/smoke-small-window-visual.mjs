@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MemoryCacheStore, createCatalog } from "../src/index.js";
+import { MemoryCacheStore, createCatalog, recommendForInput } from "../src/index.js";
 import {
   createSmallWindowRuntime,
   startSmallWindowServer
@@ -22,6 +22,25 @@ const fixtureRows = [
     placement_count: [5, 4, 3, 2, 1, 1, 1, 1]
   }
 ];
+const compFixture = JSON.parse(await readFile(new URL("../test/fixtures/comp-rankings/exact-units-traits2-minimal.json", import.meta.url), "utf8"));
+const compVisualResponse = {
+  ...compFixture,
+  data: [
+    ...compFixture.data,
+    {
+      units_traits: "TFT17_MissingA&TFT17_MissingB&TFT17_MissingC&TFT17_MissingD&TFT17_MissingE&TFT17_MissingF|TFT17_MissingTrait_1",
+      placement_count: [1000, 900, 800, 700, 100, 80, 60, 40]
+    }
+  ]
+};
+const itemCompVisualResponse = {
+  data: [{
+    units_traits: "TFT17_Aatrox&TFT17_Xayah|TFT17_Stargazer_1&TFT17_Stargazer_Serpent_1",
+    comp_name: "观星霞",
+    placement_count: [160, 150, 140, 130, 110, 80, 60, 50]
+  }],
+  filter_adjustment: { sample_size: 123456 }
+};
 
 function argument(name) {
   const index = process.argv.indexOf(name);
@@ -32,13 +51,22 @@ function assertSmoke(condition, message) {
   if (!condition) throw new Error(`Visual smoke failed: ${message}`);
 }
 
+function visualFixtureIcon(url) {
+  const decoded = decodeURIComponent(new URL(url).pathname);
+  const fileName = decoded.split("/").pop() ?? "?";
+  const label = fileName.replace(/[^a-z0-9]/gi, "").slice(0, 1).toUpperCase() || "?";
+  const color = decoded.includes("tft-item") ? "#b87918" : decoded.includes("tft-trait") ? "#4d6f58" : "#315f74";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" rx="6" fill="${color}"/><text x="20" y="26" text-anchor="middle" font-family="Arial" font-size="18" font-weight="700" fill="#fff">${label}</text></svg>`;
+}
+
 async function loadPlaywright() {
   const configured = argument("--playwright-module") ?? process.env.PLAYWRIGHT_MODULE;
   const specifier = configured
     ? pathToFileURL(resolve(configured)).href
     : "playwright";
   try {
-    return await import(specifier);
+    const loaded = await import(specifier);
+    return loaded.default ?? loaded;
   } catch (error) {
     console.log("Visual smoke skipped: Playwright is not available.");
     console.log(error.message);
@@ -58,7 +86,7 @@ function closeServer(server) {
 async function inspectLayout(page, label) {
   const result = await page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
-    const overflowing = [...document.querySelectorAll(".shell, .query-panel, .controls, .segmented, .result-card, .empty-state, .details, .stats")]
+    const overflowing = [...document.querySelectorAll(".shell, .query-panel, .controls, .segmented, .result-card, .comp-card, .ranking-section, .empty-state, .details, .stats")]
       .filter((element) => {
         const rect = element.getBoundingClientRect();
         return rect.width > 0 && (rect.left < -1 || rect.right > viewportWidth + 1);
@@ -69,7 +97,7 @@ async function inspectLayout(page, label) {
         right: element.getBoundingClientRect().right,
         viewportWidth
       }));
-    const clipped = [...document.querySelectorAll("button, .item, .stat")]
+    const clipped = [...document.querySelectorAll("button, .item, .stat, .comp-summary-metric, .comp-stat-line span")]
       .filter((element) => element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1)
       .map((element) => ({
         text: element.textContent.trim(),
@@ -90,6 +118,29 @@ async function inspectLayout(page, label) {
   return result;
 }
 
+async function inspectAssetDimensions(page, label) {
+  const result = await page.evaluate(() => {
+    const expected = {
+      "equipment-unit-icon": 34,
+      "unit-icon": 32,
+      "trait-icon": 22,
+      "tiny-item-icon": 18,
+      "item-icon": 24
+    };
+    return [...document.querySelectorAll(".equipment-unit-icon, .unit-icon, .trait-icon, .tiny-item-icon, .item-icon")]
+      .filter((element) => element.getBoundingClientRect().width > 0)
+      .map((element) => {
+        const className = Object.keys(expected).find((name) => element.classList.contains(name));
+        const rect = element.getBoundingClientRect();
+        return { className, width: rect.width, height: rect.height, expected: expected[className] };
+      });
+  });
+  const mismatched = result.filter((entry) => Math.abs(entry.width - entry.expected) > 0.5 || Math.abs(entry.height - entry.expected) > 0.5);
+  assertSmoke(result.length > 0, `${label} rendered no asset thumbnails`);
+  assertSmoke(mismatched.length === 0, `${label} has unstable asset dimensions: ${JSON.stringify(mismatched)}`);
+  return result;
+}
+
 const playwright = await loadPlaywright();
 if (playwright) {
   const outputDir = resolve(argument("--output") ?? ".cache/visual-smoke");
@@ -99,16 +150,50 @@ if (playwright) {
   assertSmoke(existsSync(browserPath), `browser executable not found: ${browserPath}`);
   await mkdir(outputDir, { recursive: true });
 
+  let nowMs = Date.now();
+  let failCompRequest = false;
+  let emptyCompRequest = false;
+  const cacheStore = new MemoryCacheStore({ now: () => nowMs });
+
   const runtime = createSmallWindowRuntime({
     catalog: createCatalog(),
-    cacheStore: new MemoryCacheStore(),
+    cacheStore,
     fetchItems: false,
     metaTFTClient: {
       async getUnitBuilds() {
         return { data: fixtureRows };
+      },
+      async getCompCandidates(plan) {
+        if (Number(plan?.params?.days) === 14) {
+          return {
+            data: [{
+              ...itemCompVisualResponse.data[0],
+              placement_count: [10, 10, 10, 10, 10, 10, 10, 10]
+            }],
+            filter_adjustment: { sample_size: 100 }
+          };
+        }
+        return itemCompVisualResponse;
+      },
+      async getExactUnitsTraits2() {
+        if (failCompRequest) throw new Error("visual stale-cache probe");
+        if (emptyCompRequest) return { data: [] };
+        return compVisualResponse;
       }
     },
-    compsClient: {}
+    compsClient: {},
+    recommendForInputImpl: (input, options) => recommendForInput(input, {
+      ...options,
+      compsData: {
+        clusterInfo: compFixture.clusters,
+        compBuilds: [{
+          clusterId: "409002",
+          unitApiName: "TFT17_Nunu",
+          items: ["TFT_Item_WarmogsArmor", "TFT_Item_GargoyleStoneplate", "TFT_Item_DragonsClaw"],
+          games: 900
+        }]
+      }
+    })
   });
   const started = await startSmallWindowServer({
     host: "127.0.0.1",
@@ -126,17 +211,83 @@ if (playwright) {
       viewport: { width: 460, height: 760 },
       deviceScaleFactor: 1
     });
+    await page.route("https://ddragon.leagueoflegends.com/**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "image/svg+xml",
+        body: visualFixtureIcon(route.request().url())
+      });
+    });
     await page.goto(started.url, { waitUntil: "networkidle" });
+    await page.fill("#query-input", "大师以上霞什么三件装备最强？");
     await page.click("#query-form button.primary");
     await page.waitForSelector(".result-card");
+    await page.waitForSelector("button.condition-chip");
+    const autoCompChips = await page.locator("button.condition-chip").allTextContents();
+    assertSmoke(
+      autoCompChips.includes("观星霞 · 样本 880 · 系统补全"),
+      `automatic Comp chip is missing: ${JSON.stringify(autoCompChips)}`
+    );
     const desktop = await inspectLayout(page, "desktop result");
+    const desktopAssets = await inspectAssetDimensions(page, "desktop result");
+    await page.locator("#result").evaluate((element) => { element.scrollTop = 0; });
     await page.screenshot({
       path: resolve(outputDir, "desktop-result.png"),
       fullPage: true
     });
+    await page.locator(".assistant-message").last().screenshot({
+      path: resolve(outputDir, "comp-auto-460.png")
+    });
+
+    const assistantCountBeforeFollowup = await page.locator(".assistant-message").count();
+    await page.fill("#query-input", "近一天呢？");
+    await page.click("#query-form button.primary");
+    await page.waitForFunction(
+      (count) => document.querySelectorAll(".assistant-message").length > count,
+      assistantCountBeforeFollowup
+    );
+    const followupText = await page.locator(".assistant-message").last().textContent();
+    assertSmoke(followupText.includes("观星霞（系统补全，样本 880）"), "days follow-up did not render the refreshed automatic Comp");
+    const longConversation = await inspectLayout(page, "460px automatic Comp days follow-up");
+    await page.locator(".assistant-message").last().screenshot({
+      path: resolve(outputDir, "comp-auto-followup-460.png")
+    });
+
+    await page.fill("#query-input", "霞在观星霞阵容里什么三件装备最强？");
+    await page.click("#query-form button.primary");
+    await page.waitForSelector('button.condition-chip:text-is("观星霞 · 用户指定")');
+    const explicitComp = await inspectLayout(page, "460px explicit Comp result");
+    await page.locator("#result").evaluate((element) => {
+      const messages = element.querySelectorAll(".message");
+      messages[messages.length - 1]?.scrollIntoView({ block: "start" });
+    });
+    await page.locator(".assistant-message").last().screenshot({
+      path: resolve(outputDir, "comp-explicit-460.png")
+    });
 
     await page.setViewportSize({ width: 360, height: 720 });
+    await page.fill("#query-input", "近14天霞什么三件装备最强？");
+    await page.click("#query-form button.primary");
+    await page.waitForSelector('button.condition-chip:text-is("未限制 Comp · 当前条件下没有稳定 Comp")');
+    assertSmoke(
+      (await page.locator("#result").textContent()).includes("当前条件下未找到稳定 Comp，以下结果未限制 Comp"),
+      "no-stable Comp result did not state that the final query is unrestricted"
+    );
+    const noStableComp = await inspectLayout(page, "360px no-stable Comp result");
+    await page.locator("#result").evaluate((element) => {
+      const messages = element.querySelectorAll(".message");
+      messages[messages.length - 1]?.scrollIntoView({ block: "start" });
+    });
+    await page.locator(".assistant-message").last().screenshot({
+      path: resolve(outputDir, "comp-none-360.png")
+    });
+
+    await page.fill("#query-input", "霞什么三件装备最强？");
+    await page.click("#settings-button");
+    await page.locator("details.advanced-query-settings").evaluate((element) => { element.open = true; });
     await page.click('#sample-control button[data-value="10"]');
+    await page.click("#settings-done");
+    await page.fill("#query-input", "霞什么三件装备最强，样本>=10");
     await page.click("#query-form button.primary");
     await page.waitForSelector(".risk");
     const narrow = await inspectLayout(page, "360px low-sample result");
@@ -145,12 +296,68 @@ if (playwright) {
       fullPage: true
     });
 
+    await page.click("#settings-button");
+    await page.locator("details.advanced-query-settings").evaluate((element) => { element.open = true; });
     await page.click('#sample-control button[data-value="1000"]');
+    await page.click("#settings-done");
+    await page.fill("#query-input", "霞什么三件装备最强，样本>=1000");
     await page.click("#query-form button.primary");
-    await page.waitForSelector(".empty-state .summary");
+    await page.waitForSelector(".empty-state");
     const empty = await inspectLayout(page, "360px empty result");
     await page.screenshot({
       path: resolve(outputDir, "narrow-empty-result.png"),
+      fullPage: true
+    });
+
+    await page.setViewportSize({ width: 460, height: 760 });
+    await page.fill("#query-input", "当前版本最强阵容有哪些？");
+    await page.click("#query-form button.primary");
+    await page.waitForSelector(".comp-card");
+    const compDesktop = await inspectLayout(page, "460px comp ranking");
+    const compDesktopAssets = await inspectAssetDimensions(page, "460px comp ranking");
+    const missingPlaceholders = await page.locator(".comp-card .asset-thumb:not(:has(img))").count();
+    assertSmoke(missingPlaceholders >= 6, "missing-icon comp did not retain fixed placeholders");
+    await page.screenshot({
+      path: resolve(outputDir, "comp-desktop.png"),
+      fullPage: true
+    });
+
+    await page.setViewportSize({ width: 360, height: 720 });
+    const compNarrow = await inspectLayout(page, "360px comp ranking");
+    const compNarrowAssets = await inspectAssetDimensions(page, "360px comp ranking");
+    await page.screenshot({
+      path: resolve(outputDir, "comp-narrow.png"),
+      fullPage: true
+    });
+
+    nowMs += 6 * 60 * 1000;
+    failCompRequest = true;
+    await page.click("#refresh-button");
+    await page.waitForSelector(".comp-warning");
+    const compStale = await inspectLayout(page, "360px stale comp ranking");
+    assertSmoke((await page.locator(".comp-overview").last().textContent()).includes("过期缓存"), "stale comp cache was not labelled");
+    await page.screenshot({
+      path: resolve(outputDir, "comp-stale.png"),
+      fullPage: true
+    });
+
+    failCompRequest = false;
+    await page.fill("#query-input", "最热门的阵容，样本>=999999");
+    await page.click("#query-form button.primary");
+    await page.waitForSelector(".low-sample-section");
+    const compLowSample = await inspectLayout(page, "360px low-sample comp reference");
+    await page.screenshot({
+      path: resolve(outputDir, "comp-low-sample.png"),
+      fullPage: true
+    });
+
+    emptyCompRequest = true;
+    await page.fill("#query-input", "最热门的阵容，样本>=999998");
+    await page.click("#query-form button.primary");
+    await page.waitForSelector(".empty-state");
+    const compEmpty = await inspectLayout(page, "360px empty comp ranking");
+    await page.screenshot({
+      path: resolve(outputDir, "comp-empty.png"),
       fullPage: true
     });
 
@@ -160,8 +367,20 @@ if (playwright) {
       outputDir,
       checks: {
         desktop,
+        desktopAssets,
+        longConversation,
+        explicitComp,
+        noStableComp,
         narrow,
-        empty
+        empty,
+        compDesktop,
+        compDesktopAssets,
+        compNarrow,
+        compNarrowAssets,
+        compStale,
+        compLowSample,
+        compEmpty,
+        missingPlaceholders
       }
     }, null, 2));
     console.log("Small-window visual smoke checks passed.");

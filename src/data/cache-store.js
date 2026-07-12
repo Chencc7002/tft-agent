@@ -93,10 +93,13 @@ function aliasMatchesQuery(entry, query) {
 
 export function makeQueryCacheKey(query) {
   const payload = {
+    intent: query.intent ?? null,
     unit: query.unit ?? null,
     star_level: sortNumbers(query.starLevel ?? query.star_level),
     item_count: query.itemCount ?? query.item_count ?? null,
     trait_filters: sortStrings(query.traitFilters ?? query.trait_filters),
+    comp: query.comp?.status === "applied" ? query.comp.value?.id ?? "invalid" : "none",
+    comp_semantics: query.comp?.semanticsVersion ?? query.comp?.value?.semanticsVersion ?? "none",
     owned_items: sortStrings(query.ownedItems ?? query.owned_items),
     excluded_items: sortStrings(query.excludedItems ?? query.excluded_items),
     item_policy: query.itemPolicy ?? query.item_policy ?? null,
@@ -105,10 +108,27 @@ export function makeQueryCacheKey(query) {
     patch: query.patch ?? null,
     queue: query.queue ?? null,
     min_samples: query.minSamples ?? query.min_samples ?? null,
-    sort: query.sort ?? null
+    sort: query.sort ?? null,
+    metrics: sortStrings(query.metrics),
+    limit: query.limit ?? null,
+    special_mode: query.specialMode ?? null,
+    data_version: query.dataVersion ?? null
   };
 
   return `query:${stableJson(payload)}`;
+}
+
+export function makeCompCandidateCacheKey(input) {
+  const payload = {
+    unit: input.unit ?? null,
+    rank: sortStrings(input.rankFilter ?? input.rank),
+    days: input.days ?? null,
+    patch: input.patch ?? null,
+    queue: input.queue ?? null,
+    min_samples: input.minSamples ?? null,
+    semantics_version: input.semanticsVersion ?? null
+  };
+  return `comp_candidates:${stableJson(payload)}`;
 }
 
 export function makeDefaultContextCacheKey(input) {
