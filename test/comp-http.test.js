@@ -66,4 +66,3 @@ test("HTTP schema keeps an unspecified Comp absent and executes an unrestricted 
   assert.equal(payload.source.requestParams.trait, undefined);
   assert.doesNotMatch(payload.answer.summary, /Comp/);
 });
-
