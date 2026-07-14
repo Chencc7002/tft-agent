@@ -164,6 +164,24 @@ export {
   validateStructuredParserOutput
 } from "./llm/structured-parser.js";
 export {
+  CONCLUSION_EVIDENCE_SCHEMA_VERSION,
+  MAX_CONCLUSION_EVIDENCE_BYTES,
+  buildConclusionEvidence,
+  serializeConclusionEvidence
+} from "./llm/conclusion-evidence.js";
+export {
+  CONCLUSION_SCHEMA_VERSION,
+  validateConclusionOutput
+} from "./llm/conclusion-validator.js";
+export {
+  ConclusionProviderError,
+  DEFAULT_CONCLUSION_MAX_OUTPUT_TOKENS,
+  DEFAULT_CONCLUSION_TIMEOUT_MS,
+  createConclusionProviderFromConfig,
+  createOpenAICompatibleConclusionProvider,
+  resolveConclusionProviderConfig
+} from "./llm/conclusion-provider.js";
+export {
   clearEntityCandidateIndex,
   createEntityCandidateIndex,
   getOrCreateEntityCandidateIndex,
@@ -174,6 +192,10 @@ export {
   recommendForInput,
   SESSION_LAST_QUERY_KEY
 } from "./core/recommendation-service.js";
+export {
+  generateEvidenceBackedConclusion,
+  makeConclusionCacheKey
+} from "./core/conclusion-service.js";
 
 export function planQuery(input, options = {}) {
   const catalog = options.catalog ?? createCatalog();

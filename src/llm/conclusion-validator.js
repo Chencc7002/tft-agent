@@ -1,0 +1,228 @@
+export const CONCLUSION_SCHEMA_VERSION = "llm_conclusion.v1";
+
+const ROOT_KEYS = new Set([
+  "schemaVersion", "status", "headline", "summary", "reasons", "alternatives", "nextAction", "riskNotice"
+]);
+const ENTRY_KEYS = new Set(["evidenceIds", "text"]);
+const ABSOLUTE_OR_CAUSAL = /(?:必定|必然|保证|稳操胜券|唯一最强|绝对最强|百分之百|100%胜率|导致(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加)|使(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加))/u;
+const WINNER_CLAIM = /(?:更优|胜出|优于|领先|最佳|首选|更好|最强)/u;
+const LOW_SAMPLE_CLAIM = /(?:低样本|样本(?:量)?不足|不能视为稳定推荐|不稳定推荐)/u;
+const API_NAME = /\bTFT\w*_[A-Za-z0-9_]+\b/gu;
+const QUOTED_ENTITY = /[“"]([^”"\n]{1,24}(?:刀|弓|剑|甲|杖|冠|拳|刃|矛|锤|盾|盔|铠|爪|枪|炮|帽|纹章|徽章))[”"]/gu;
+
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function unknownKeys(value, allowed, path, errors) {
+  for (const key of Object.keys(value ?? {})) {
+    if (!allowed.has(key)) errors.push(`${path}.${key} is not allowed`);
+  }
+}
+
+function readText(value, path, limit, errors, { nullable = false } = {}) {
+  if (nullable && value === null) return null;
+  if (typeof value !== "string") {
+    errors.push(`${path} must be a string${nullable ? " or null" : ""}`);
+    return "";
+  }
+  const text = value.trim();
+  if (!text) errors.push(`${path} must not be empty`);
+  if (text.length > limit) errors.push(`${path} exceeds ${limit} characters`);
+  return text;
+}
+
+function evidenceRecords(evidence) {
+  const records = new Map();
+  for (const record of evidence?.recommendations ?? []) {
+    if (record?.evidenceId) records.set(record.evidenceId, record);
+  }
+  for (const record of evidence?.comparison?.options ?? []) {
+    if (record?.evidenceId) records.set(record.evidenceId, record);
+  }
+  return records;
+}
+
+function allStrings(value, output = []) {
+  if (typeof value === "string") output.push(value);
+  else if (Array.isArray(value)) value.forEach((entry) => allStrings(entry, output));
+  else if (isObject(value)) Object.values(value).forEach((entry) => allStrings(entry, output));
+  return output;
+}
+
+function recordNames(record) {
+  const names = [];
+  const collect = (value) => {
+    if (!value) return;
+    if (typeof value.apiName === "string") names.push(value.apiName);
+    if (typeof value.name === "string") names.push(value.name);
+  };
+  collect(record?.item);
+  for (const item of record?.items ?? []) collect(item);
+  for (const item of record?.representativeItems ?? []) collect(item);
+  if (record?.compId) names.push(record.compId);
+  if (record?.name) names.push(record.name);
+  for (const unit of record?.units ?? []) {
+    collect(unit);
+    for (const item of unit?.items ?? []) collect(item);
+  }
+  for (const trait of record?.traits ?? []) collect(trait);
+  return names.filter(Boolean);
+}
+
+function allowedNames(evidence, records = null) {
+  const values = new Set();
+  const add = (value) => {
+    if (value?.apiName) values.add(String(value.apiName));
+    if (value?.name) values.add(String(value.name));
+  };
+  add(evidence?.query?.unit);
+  for (const key of ["lockedItems", "excludedItems", "comparisonItems", "traits"]) {
+    for (const value of evidence?.query?.[key] ?? []) add(value);
+  }
+  for (const record of records ?? evidenceRecords(evidence).values()) {
+    for (const name of recordNames(record)) values.add(name);
+  }
+  return values;
+}
+
+function catalogNames(catalog) {
+  const names = new Set();
+  for (const collection of [catalog?.items, catalog?.units, catalog?.traits]) {
+    for (const entity of collection ?? []) {
+      for (const key of ["apiName", "filterId", "preferredDisplayName", "zhName", "shortName"]) {
+        if (entity?.[key]) names.add(String(entity[key]));
+      }
+    }
+  }
+  return names;
+}
+
+function statsFor(records) {
+  return [...records].map((record) => record?.stats).filter(Boolean);
+}
+
+function validateNumbers(text, records, path, errors) {
+  const stats = statsFor(records);
+  const rates = stats.flatMap((entry) => [entry.top4Rate, entry.winRate, entry.pickRate])
+    .filter(Number.isFinite)
+    .map((value) => Number((value * 100).toFixed(1)));
+  const games = stats.map((entry) => Number(entry.games)).filter(Number.isFinite);
+  const placements = stats.map((entry) => Number(entry.avgPlacement)).filter(Number.isFinite);
+
+  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*%/gu)) {
+    const value = Number(match[1]);
+    if (!rates.some((allowed) => Math.abs(allowed - value) <= 0.051)) {
+      errors.push(`${path} contains unsupported percentage: ${match[0]}`);
+    }
+  }
+  for (const match of text.matchAll(/(\d+)\s*(?:场|局|个?样本)/gu)) {
+    const value = Number(match[1]);
+    if (!games.includes(value)) errors.push(`${path} contains unsupported sample count: ${match[0]}`);
+  }
+  for (const match of text.matchAll(/(?:均名|平均名次)\s*(?:为|是|[:：])?\s*(\d+(?:\.\d+)?)/gu)) {
+    const value = Number(match[1]);
+    if (!placements.some((allowed) => Math.abs(Number(allowed.toFixed(2)) - value) <= 0.005)) {
+      errors.push(`${path} contains unsupported average placement: ${match[0]}`);
+    }
+  }
+}
+
+function validateNames(text, names, knownCatalogNames, path, errors) {
+  for (const match of text.matchAll(API_NAME)) {
+    if (!names.has(match[0])) errors.push(`${path} contains an API name absent from evidence: ${match[0]}`);
+  }
+  for (const name of knownCatalogNames) {
+    if (name.length >= 2 && text.includes(name) && !names.has(name)) {
+      errors.push(`${path} contains a catalog entity absent from evidence: ${name}`);
+    }
+  }
+  for (const match of text.matchAll(QUOTED_ENTITY)) {
+    if (!names.has(match[1])) errors.push(`${path} contains a quoted entity absent from evidence: ${match[1]}`);
+  }
+}
+
+function validateTextFacts(text, records, evidence, catalog, path, errors) {
+  if (ABSOLUTE_OR_CAUSAL.test(text)) errors.push(`${path} contains an absolute or causal claim`);
+  const names = allowedNames(evidence, records);
+  validateNames(text, names, catalogNames(catalog), path, errors);
+  validateNumbers(text, records, path, errors);
+}
+
+function readEntries(value, path, maxEntries, records, evidence, catalog, errors) {
+  if (!Array.isArray(value)) {
+    errors.push(`${path} must be an array`);
+    return [];
+  }
+  if (value.length > maxEntries) errors.push(`${path} contains more than ${maxEntries} entries`);
+  return value.slice(0, maxEntries).map((entry, index) => {
+    const entryPath = `${path}[${index}]`;
+    if (!isObject(entry)) {
+      errors.push(`${entryPath} must be an object`);
+      return null;
+    }
+    unknownKeys(entry, ENTRY_KEYS, entryPath, errors);
+    if (!Array.isArray(entry.evidenceIds) || entry.evidenceIds.length === 0 || entry.evidenceIds.length > 3) {
+      errors.push(`${entryPath}.evidenceIds must contain 1 to 3 entries`);
+    }
+    const ids = Array.isArray(entry.evidenceIds)
+      ? [...new Set(entry.evidenceIds.map(String))].slice(0, 3)
+      : [];
+    const linkedRecords = [];
+    for (const id of ids) {
+      if (!records.has(id)) errors.push(`${entryPath}.evidenceIds contains unknown evidence: ${id}`);
+      else linkedRecords.push(records.get(id));
+    }
+    const text = readText(entry.text, `${entryPath}.text`, 220, errors);
+    validateTextFacts(text, linkedRecords, evidence, catalog, `${entryPath}.text`, errors);
+    return { evidenceIds: ids, text };
+  }).filter(Boolean);
+}
+
+export function validateConclusionOutput(rawValue, evidence, options = {}) {
+  const errors = [];
+  if (!isObject(rawValue)) return { valid: false, errors: ["conclusion output must be an object"], value: null };
+  unknownKeys(rawValue, ROOT_KEYS, "output", errors);
+  if (rawValue.schemaVersion !== CONCLUSION_SCHEMA_VERSION) errors.push(`schemaVersion must be ${CONCLUSION_SCHEMA_VERSION}`);
+  if (rawValue.status !== "ok" && rawValue.status !== "insufficient_evidence") {
+    errors.push("status must be ok or insufficient_evidence");
+  }
+
+  const records = evidenceRecords(evidence);
+  const headline = readText(rawValue.headline, "headline", 80, errors);
+  const summary = readText(rawValue.summary, "summary", 300, errors);
+  const reasons = readEntries(rawValue.reasons, "reasons", 4, records, evidence, options.catalog, errors);
+  const alternatives = readEntries(rawValue.alternatives, "alternatives", 3, records, evidence, options.catalog, errors);
+  const nextAction = readText(rawValue.nextAction, "nextAction", 200, errors);
+  const riskNotice = readText(rawValue.riskNotice, "riskNotice", 180, errors, { nullable: true });
+
+  const globalRecords = [...records.values()];
+  for (const [path, text] of [["headline", headline], ["summary", summary], ["nextAction", nextAction], ["riskNotice", riskNotice ?? ""]]) {
+    validateTextFacts(text, globalRecords, evidence, options.catalog, path, errors);
+  }
+  const combined = [headline, summary, nextAction, riskNotice, ...reasons.map((entry) => entry.text), ...alternatives.map((entry) => entry.text)].filter(Boolean).join("\n");
+  if (evidence?.generationRules?.mustMentionLowSample && !/(?:低样本|样本不足|仅供参考|不稳定)/u.test(combined)) {
+    errors.push("low-sample evidence requires a risk notice");
+  }
+  if (!evidence?.generationRules?.mustMentionLowSample && LOW_SAMPLE_CLAIM.test(combined)) {
+    errors.push("stable evidence cannot be described as low-sample");
+  }
+  if (evidence?.generationRules?.mustMentionStaleData && !/(?:过期|时效|非最新|旧缓存)/u.test(combined)) {
+    errors.push("stale evidence requires a freshness risk notice");
+  }
+  if (evidence?.generationRules?.mustAvoidWinnerClaim && WINNER_CLAIM.test(combined)) {
+    errors.push("unresolved comparison cannot claim a winner");
+  }
+
+  const value = {
+    schemaVersion: CONCLUSION_SCHEMA_VERSION,
+    status: rawValue.status,
+    headline,
+    summary,
+    reasons,
+    alternatives,
+    nextAction,
+    riskNotice
+  };
+  return { valid: errors.length === 0, errors, value: errors.length === 0 ? value : null };
+}

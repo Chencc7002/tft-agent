@@ -13,7 +13,7 @@ export const messages = {
     resultEmptyTitle: "等待你的查询", resultEmptyBody: "推荐、单件排行和阵容榜会显示在这里。", closeSettings: "关闭设置",
     advancedDefaults: "高级查询默认值", queryConditions: "查询条件", sampleThreshold: "样本阈值", noThreshold: "无下限", itemScope: "装备范围", ordinary: "普通",
     radiant: "光明", artifact: "神器", emblem: "纹章", special: "特殊", sort: "排序", sortTop4: "前四优先", sortWin: "吃鸡优先", sortRobust: "稳健优先",
-    days: "统计天数", autoComp: "自动 Comp", stableMostSamples: "稳定样本最多", parser: "结构化解析", inherit: "继承", automatic: "自动",
+    days: "统计天数", autoComp: "自动 Comp", stableMostSamples: "稳定样本最多", parser: "结构化解析", conclusionGeneration: "结论增强", inherit: "继承", automatic: "自动", on: "开启",
     off: "关闭", always: "始终", ranks: "段位", rankChallenger: "王者", rankGrandmaster: "宗师", rankMaster: "大师", rankDiamond: "钻石",
     rankEmerald: "翡翠", rankPlatinum: "铂金", rankGold: "黄金", rankSilver: "白银", rankBronze: "青铜", rankIron: "黑铁", runtimeStatus: "数据与运行状态", cache: "缓存",
     aliasReview: "别名审核（高级）", aliases: "别名", export: "导出", download: "下载", clearCandidates: "清候选", aliasState: "别名状态",
@@ -53,7 +53,8 @@ export const messages = {
     comparisonWinner: "当前条件下 {name} 的互斥完整出装样本领先", comparisonNoWinner: "暂不判断胜者：{reason}", comparisonOverlap: "共同出现样本 {games}（{rate}%），未计入胜负", comparisonOverlapZero: "共同出现样本 0", primaryMetric: "主指标：{value}", noStablePairing: "暂无稳定搭配", exclusiveSamples: "互斥样本 {value}", commonFullBuild: "常见完整搭配", comparisonItems: "比较：{value}",
     auditMissingCanonicalName: "缺少中文名", auditUnknownCategory: "未知类别", auditMissingOfficialDetails: "缺少官方详情", auditMissingOfficialEffect: "缺少效果", auditMissingRecipe: "配方不完整", auditUnversionedAvailability: "可用性 override 未绑定版本", auditNameConflict: "官方名与手工名冲突", auditCatalogFallback: "目录使用回退缓存", auditOfficialSourceError: "官方详情源错误",
     auditMeta: "{patch} · 目录 {catalogStatus}/{catalogSource} · 详情 {detailStatus}", auditSummary: "{returned} / {total} 条 · {issues} 条有问题", noImage: "无图", noShortName: "无短名", noHistoricalAliases: "无历史别名", available: "可用", effectStatus: "效果 {value}", recipeStatus: "配方 {value}", auditNameSource: "名称源：{source} · override：{override}", unversioned: "未绑定版本", noAuditOverride: "无", noAuditIssues: "无审计问题", noAuditResults: "当前筛选无结果", auditLoading: "正在转换审核数据…", auditLoadFailed: "装备目录审核加载失败", auditExportFailed: "审核结果导出失败",
-    newConversation: "新会话已开始。直接问我英雄出装、单件装备或阵容排行。", waitingQuery: "等待查询", rankCoverage: "{value}%覆盖"
+    newConversation: "新会话已开始。直接问我英雄出装、单件装备或阵容排行。", waitingQuery: "等待查询", rankCoverage: "{value}%覆盖",
+    dataInterpretation: "数据解读", generatedFromEvidence: "由数据生成", templateFallback: "已使用模板回退", nextAction: "下一步", explanationHelpful: "解读有帮助", explanationNotHelpful: "解读需改进", cachedConclusion: "结论缓存"
   },
   "en-US": {
     seasonName: "Cosmic", languageLabel: "Language", settings: "Settings", statusReady: "Ready", statusQuerying: "Querying", statusRefreshing: "Refreshing", statusLive: "Live",
@@ -66,7 +67,7 @@ export const messages = {
     resultEmptyTitle: "Waiting for your query", resultEmptyBody: "Recommendations, item rankings, and comp rankings appear here.", closeSettings: "Close settings",
     advancedDefaults: "Advanced query defaults", queryConditions: "Query conditions", sampleThreshold: "Sample threshold", noThreshold: "No threshold", itemScope: "Item scope", ordinary: "Normal",
     radiant: "Radiant", artifact: "Artifact", emblem: "Emblem", special: "Special", sort: "Sort", sortTop4: "Top 4 first", sortWin: "Win first", sortRobust: "Robust first",
-    days: "Days", autoComp: "Auto Comp", stableMostSamples: "Most stable samples", parser: "Structured parsing", inherit: "Inherit", automatic: "Auto",
+    days: "Days", autoComp: "Auto Comp", stableMostSamples: "Most stable samples", parser: "Structured parsing", conclusionGeneration: "Conclusion enhancement", inherit: "Inherit", automatic: "Auto", on: "On",
     off: "Off", always: "Always", ranks: "Ranks", rankChallenger: "Challenger", rankGrandmaster: "Grandmaster", rankMaster: "Master", rankDiamond: "Diamond",
     rankEmerald: "Emerald", rankPlatinum: "Platinum", rankGold: "Gold", rankSilver: "Silver", rankBronze: "Bronze", rankIron: "Iron", runtimeStatus: "Data & runtime status", cache: "Cache",
     aliasReview: "Alias review (advanced)", aliases: "Aliases", export: "Export", download: "Download", clearCandidates: "Clear drafts", aliasState: "Alias state",
@@ -106,7 +107,8 @@ export const messages = {
     comparisonWinner: "Under the current conditions, {name} leads on exclusive complete-build samples", comparisonNoWinner: "No winner yet: {reason}", comparisonOverlap: "{games} shared samples ({rate}%), excluded from the decision", comparisonOverlapZero: "0 shared samples", primaryMetric: "Primary metric: {value}", noStablePairing: "No stable pairing", exclusiveSamples: "Exclusive samples {value}", commonFullBuild: "Common complete build", comparisonItems: "Compare: {value}",
     auditMissingCanonicalName: "Missing Chinese canonical name", auditUnknownCategory: "Unknown category", auditMissingOfficialDetails: "Missing official details", auditMissingOfficialEffect: "Missing effect", auditMissingRecipe: "Incomplete recipe", auditUnversionedAvailability: "Availability override is not version-bound", auditNameConflict: "Official/manual name conflict", auditCatalogFallback: "Catalog uses fallback cache", auditOfficialSourceError: "Official details source error",
     auditMeta: "{patch} · Catalog {catalogStatus}/{catalogSource} · Details {detailStatus}", auditSummary: "{returned} / {total} rows · {issues} with issues", noImage: "No image", noShortName: "No short name", noHistoricalAliases: "No historical aliases", available: "Available", effectStatus: "Effect {value}", recipeStatus: "Recipe {value}", auditNameSource: "Name source: {source} · override: {override}", unversioned: "Unversioned", noAuditOverride: "None", noAuditIssues: "No audit issues", noAuditResults: "No matching results", auditLoading: "Transforming audit data…", auditLoadFailed: "Failed to load the item catalog audit", auditExportFailed: "Failed to export audit results",
-    newConversation: "A new conversation has started. Ask about builds, item rankings, or comps.", waitingQuery: "Waiting for a query", rankCoverage: "{value}% coverage"
+    newConversation: "A new conversation has started. Ask about builds, item rankings, or comps.", waitingQuery: "Waiting for a query", rankCoverage: "{value}% coverage",
+    dataInterpretation: "Data interpretation", generatedFromEvidence: "Generated from evidence", templateFallback: "Template fallback", nextAction: "Next action", explanationHelpful: "Helpful explanation", explanationNotHelpful: "Improve explanation", cachedConclusion: "Conclusion cache"
   }
 };
 
