@@ -21,6 +21,7 @@ import {
   buildUnitCatalogFromCompsData,
   buildUnitCatalogFromExplorerRows,
   createCatalog,
+  createConclusionProviderFromConfig,
   createAssetResolver,
   createStructuredParserFromConfig,
   fetchOfficialTftItemDetails,
@@ -32,6 +33,8 @@ import {
   itemCatalogAuditToCsv,
   parseQuery,
   recommendForInput,
+  generateEvidenceBackedConclusion,
+  resolveConclusionProviderConfig,
   resolveStructuredParserConfig
 } from "../index.js";
 
@@ -69,6 +72,7 @@ const VALID_STRUCTURED_PARSER_MODES = new Set([
   "never",
   "always"
 ]);
+const VALID_CONCLUSION_MODES = new Set(["inherit", "on", "off"]);
 const VALID_RANKS = new Set([
   "CHALLENGER",
   "GRANDMASTER",
@@ -86,6 +90,8 @@ const VALID_FEEDBACK_TYPES = new Set([
   "alias_candidate",
   "good_recommendation",
   "bad_recommendation",
+  "good_explanation",
+  "bad_explanation",
   "missing_result",
   "general"
 ]);
@@ -96,7 +102,8 @@ export const DEFAULT_SMALL_WINDOW_PREFERENCES = {
   sort: DEFAULT_QUERY_OPTIONS.sort,
   days: DEFAULT_QUERY_OPTIONS.days,
   rankFilter: DEFAULT_QUERY_OPTIONS.rankFilter,
-  structuredParserMode: "inherit"
+  structuredParserMode: "inherit",
+  conclusionMode: "inherit"
 };
 
 export function normalizeSmallWindowCacheStoreType(value = "json") {
@@ -182,6 +189,47 @@ function createSmallWindowStructuredParser(options = {}, env = process.env) {
   };
 }
 
+export function resolveSmallWindowConclusionConfig(options = {}, env = process.env) {
+  return resolveConclusionProviderConfig({
+    ...(options.conclusionGeneratorConfig ?? {}),
+    provider: options.conclusionProviderName ?? options.conclusionGeneratorConfig?.provider,
+    endpoint: options.conclusionEndpoint ?? options.conclusionGeneratorConfig?.endpoint,
+    model: options.conclusionModel ?? options.conclusionGeneratorConfig?.model,
+    apiKey: options.conclusionApiKey ?? options.conclusionGeneratorConfig?.apiKey,
+    timeoutMs: options.conclusionTimeoutMs ?? options.conclusionGeneratorConfig?.timeoutMs,
+    maxOutputTokens: options.conclusionMaxOutputTokens ?? options.conclusionGeneratorConfig?.maxOutputTokens,
+    mode: options.conclusionMode ?? options.conclusionGeneratorConfig?.mode,
+    allowUnauthenticated: options.conclusionAllowUnauthenticated ?? options.conclusionGeneratorConfig?.allowUnauthenticated,
+    onEvent: options.conclusionEvent ?? options.conclusionGeneratorConfig?.onEvent
+  }, env);
+}
+
+function createSmallWindowConclusionGenerator(options = {}, env = process.env) {
+  if (options.conclusionProvider) {
+    return {
+      conclusionProvider: options.conclusionProvider,
+      conclusionGeneratorConfig: {
+        enabled: true,
+        mode: "on",
+        provider: "injected",
+        model: options.conclusionModel ?? options.conclusionProvider.model ?? "injected-model",
+        promptVersion: "generate-conclusion.v1",
+        cacheTtlMs: 30 * 60 * 1000,
+        ...(options.conclusionGeneratorConfig ?? {})
+      }
+    };
+  }
+  const config = resolveSmallWindowConclusionConfig(options, env);
+  return {
+    conclusionProvider: createConclusionProviderFromConfig(config, {
+      fetchImpl: options.conclusionFetch,
+      promptText: options.conclusionPromptText,
+      onRequestLog: options.conclusionRequestLog
+    }),
+    conclusionGeneratorConfig: config
+  };
+}
+
 function summarizeCacheStore(options = {}, cacheStore) {
   if (options.cacheStoreInfo) {
     const type = String(options.cacheStoreInfo.type ?? "unknown");
@@ -226,6 +274,19 @@ function summarizeStructuredParserConfig(config = {}) {
   return summary;
 }
 
+function summarizeConclusionConfig(config = {}) {
+  const summary = {
+    enabled: Boolean(config.enabled),
+    provider: String(config.provider ?? "off"),
+    mode: String(config.mode ?? "off"),
+    endpointConfigured: Boolean(config.endpoint),
+    apiKeyConfigured: Boolean(config.apiKey)
+  };
+  if (config.model) summary.model = String(config.model);
+  if (Number.isFinite(Number(config.timeoutMs))) summary.timeoutMs = Number(config.timeoutMs);
+  return summary;
+}
+
 export function getSmallWindowRuntimeStatus(runtime = {}) {
   const cacheStoreInfo = runtime.cacheStoreInfo ?? summarizeCacheStore({}, runtime.cacheStore);
   const cachePath = cacheStoreInfo.cachePath ?? cacheStoreInfo.path ?? null;
@@ -239,6 +300,7 @@ export function getSmallWindowRuntimeStatus(runtime = {}) {
   return {
     cache,
     structuredParser: summarizeStructuredParserConfig(runtime.structuredParserConfig ?? {}),
+    conclusionGenerator: summarizeConclusionConfig(runtime.conclusionGeneratorConfig ?? {}),
     requests: {
       explorerTimeoutMs: runtime.requestTimeouts?.explorerTimeoutMs ?? null,
       catalogTimeoutMs: runtime.requestTimeouts?.catalogTimeoutMs ?? null,
@@ -677,6 +739,7 @@ export function normalizeSmallWindowPreferences(value = {}) {
   if (VALID_STRUCTURED_PARSER_MODES.has(value.structuredParserMode)) {
     preferences.structuredParserMode = value.structuredParserMode;
   }
+  if (VALID_CONCLUSION_MODES.has(value.conclusionMode)) preferences.conclusionMode = value.conclusionMode;
   const days = Number(value.days);
   if (Number.isInteger(days) && days > 0 && days <= 30) preferences.days = days;
   if (Array.isArray(value.rankFilter) && value.rankFilter.length > 0) {
@@ -1068,6 +1131,16 @@ export function createSmallWindowRuntime(options = {}) {
   });
   const cacheStore = options.cacheStore ?? createSmallWindowCacheStore(options);
   const cacheStoreInfo = summarizeCacheStore(options, cacheStore);
+  const conclusionGeneratorConfig = options.conclusionGeneratorConfig ?? (options.conclusionProvider
+    ? {
+      enabled: true,
+      mode: "on",
+      provider: "injected",
+      model: options.conclusionModel ?? options.conclusionProvider.model ?? "injected-model",
+      promptVersion: "generate-conclusion.v1",
+      cacheTtlMs: 30 * 60 * 1000
+    }
+    : { enabled: false, mode: "off", provider: "off" });
 
   return {
     metaTFTClient,
@@ -1099,6 +1172,8 @@ export function createSmallWindowRuntime(options = {}) {
     structuredParser: options.structuredParser ?? null,
     useStructuredParser: options.useStructuredParser ?? "auto",
     structuredParserConfig: options.structuredParserConfig ?? null,
+    conclusionProvider: options.conclusionProvider ?? null,
+    conclusionGeneratorConfig,
     recommendForInputImpl: options.recommendForInputImpl ?? recommendForInput
   };
 }
@@ -1123,11 +1198,13 @@ export function createSmallWindowCacheStore(options = {}) {
 
 export async function createSmallWindowRuntimeAsync(options = {}, env = process.env) {
   const structuredParserRuntime = createSmallWindowStructuredParser(options, env);
+  const conclusionRuntime = createSmallWindowConclusionGenerator(options, env);
   const requestTimeouts = resolveSmallWindowRequestTimeouts(options, env);
   const runtimeOptions = {
     ...options,
     ...requestTimeouts,
-    ...structuredParserRuntime
+    ...structuredParserRuntime,
+    ...conclusionRuntime
   };
 
   if (options.cacheStore) return createSmallWindowRuntime(runtimeOptions);
@@ -1519,6 +1596,10 @@ export async function handleRecommendRequest(body, runtime) {
   const structuredParserMode = preferences.structuredParserMode === "inherit"
     ? runtime.useStructuredParser
     : preferences.structuredParserMode;
+  const sessionKey = conversationId === "default" ? SESSION_LAST_QUERY_KEY : `last_query:${conversationId}`;
+  const previousSessionEntry = runtime.conclusionGeneratorConfig?.enabled && preferences.conclusionMode !== "off"
+    ? await runtime.cacheStore?.getSessionState?.(sessionKey)
+    : null;
   const result = await runtime.recommendForInputImpl(input, {
     catalog,
     metaTFTClient: runtime.metaTFTClient,
@@ -1531,7 +1612,7 @@ export async function handleRecommendRequest(body, runtime) {
     bypassDefaultContextCache: Boolean(body.refresh),
     structuredParser: runtime.structuredParser,
     useStructuredParser: structuredParserMode,
-    sessionKey: conversationId === "default" ? SESSION_LAST_QUERY_KEY : `last_query:${conversationId}`
+    sessionKey
   });
   const warnings = warning ? [...(result.query?.warnings ?? []), warning] : result.query?.warnings;
   if (warnings) result.query.warnings = warnings;
@@ -1546,6 +1627,18 @@ export async function handleRecommendRequest(body, runtime) {
     }
   }
 
+  const generatedConclusion = await generateEvidenceBackedConclusion({
+    result,
+    catalog,
+    input,
+    previousQuery: previousSessionEntry?.value?.query ?? previousSessionEntry?.value ?? null,
+    config: runtime.conclusionGeneratorConfig,
+    provider: runtime.conclusionProvider,
+    cacheStore: runtime.cacheStore,
+    requestEnabled: preferences.conclusionMode !== "off",
+    bypassCache: Boolean(body.refresh)
+  });
+
   const payload = serializeRecommendation(result, catalog, {
     durationMs: Date.now() - startedAt,
     catalogWarning: warning,
@@ -1554,6 +1647,10 @@ export async function handleRecommendRequest(body, runtime) {
     conversationId,
     itemDetails: comparisonItemDetails
   });
+  payload.answer = {
+    ...(payload.answer ?? {}),
+    generatedConclusion
+  };
   Object.assign(payload, conversationMeta({ conversationId }));
   return {
     statusCode: 200,

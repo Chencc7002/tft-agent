@@ -9,6 +9,7 @@ const state = {
   sort: "top4_first",
   days: 3,
   structuredParserMode: "inherit",
+  conclusionMode: "inherit",
   rankFilter: [],
   lastInput: "",
   lastResult: null,
@@ -32,7 +33,8 @@ const state = {
   responsesById: new Map(),
   responseCounter: 0,
   currentResponseId: null,
-  feedbackByCard: {}
+  feedbackByCard: {},
+  explanationFeedback: null
 };
 
 const form = document.querySelector("#query-form");
@@ -71,6 +73,7 @@ const detailsEl = document.querySelector("#details");
 const sortSelect = document.querySelector("#sort-select");
 const daysSelect = document.querySelector("#days-select");
 const structuredParserModeSelect = document.querySelector("#structured-parser-mode-select");
+const conclusionModeSelect = document.querySelector("#conclusion-mode-select");
 const rankControl = document.querySelector("#rank-control");
 const cacheStatusEl = document.querySelector("#cache-status");
 const llmStatusEl = document.querySelector("#llm-status");
@@ -179,6 +182,7 @@ function applyPreferences(preferences = {}) {
   if (preferences.sort) state.sort = preferences.sort;
   if (preferences.days) state.days = Number(preferences.days);
   if (preferences.structuredParserMode) state.structuredParserMode = preferences.structuredParserMode;
+  if (preferences.conclusionMode) state.conclusionMode = preferences.conclusionMode;
   if (Array.isArray(preferences.rankFilter)) state.rankFilter = preferences.rankFilter;
 
   setActiveButton(document.querySelector("#sample-control"), state.minSamples);
@@ -186,6 +190,7 @@ function applyPreferences(preferences = {}) {
   sortSelect.value = state.sort;
   daysSelect.value = String(state.days);
   structuredParserModeSelect.value = state.structuredParserMode;
+  conclusionModeSelect.value = state.conclusionMode;
   for (const input of rankControl.querySelectorAll("input[type=checkbox]")) {
     input.checked = state.rankFilter.includes(input.value);
   }
@@ -205,6 +210,7 @@ async function savePreferences() {
           sort: state.sort,
           days: state.days,
           structuredParserMode: state.structuredParserMode,
+          conclusionMode: state.conclusionMode,
           rankFilter: state.rankFilter
         }
       })
@@ -241,15 +247,19 @@ function renderRuntimeStatus(runtime = {}) {
   state.runtimeStatus = runtime;
   const cache = runtime.cache ?? {};
   const parser = runtime.structuredParser ?? {};
+  const conclusion = runtime.conclusionGenerator ?? {};
   const requests = runtime.requests ?? {};
   cacheStatusEl.textContent = cacheStatusLabel(cache.type);
-  llmStatusEl.textContent = parser.enabled
-    ? `${parser.provider ?? "LLM"} / ${parser.mode ?? "auto"}`
-    : t("disabled");
+  llmStatusEl.textContent = conclusion.enabled
+    ? `${t("dataInterpretation")} / ${conclusion.model ?? conclusion.provider ?? "LLM"}`
+    : parser.enabled
+      ? `${parser.provider ?? "LLM"} / ${parser.mode ?? "auto"}`
+      : t("disabled");
 
   const detail = [];
   if (cache.persistent) detail.push(cache.pathConfigured ? t("persistence") : t("persistenceUnset"));
   if (parser.enabled && parser.model) detail.push(parser.model);
+  if (conclusion.enabled && conclusion.timeoutMs) detail.push(`${t("dataInterpretation")} ${conclusion.timeoutMs}ms`);
   const explorerTimeoutMs = Number(requests.explorerTimeoutMs);
   if (requests.explorerTimeoutMs != null && Number.isFinite(explorerTimeoutMs) && explorerTimeoutMs > 0) {
     detail.push(t("timeout", { seconds: explorerTimeoutMs / 1000 }));
@@ -418,6 +428,7 @@ function renderCompRankings(data) {
     ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
     ${sections.map(([key, comps]) => `<section class="ranking-section"><h2>${escapeHtml(compMetricLabel(key))}</h2>${comps.map((comp, index) => renderCompCard(comp, key, index)).join("")}</section>`).join("")}
     ${references.length ? `<section class="ranking-section low-sample-section"><h2>${t("lowSampleSection")}</h2>${references.map((comp, index) => renderCompCard(comp, "popularity", index)).join("")}</section>` : ""}
+    ${generatedConclusionCard(data)}
     <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
 }
 
@@ -657,6 +668,7 @@ function renderItemComparison(data) {
       ${(comparison.warnings ?? []).map((warning) => `<div>${escapeHtml(warning)}</div>`).join("")}
       ${summaryLines(data)}
     </div>
+    ${generatedConclusionCard(data)}
     ${conditionPanel(data)}
     ${sourceAndRisk(data)}
   `);
@@ -772,6 +784,31 @@ function sourceAndRisk(data) {
   `;
 }
 
+function generatedConclusionCard(data) {
+  const conclusion = data?.answer?.generatedConclusion;
+  if (!conclusion || conclusion.status === "disabled" || conclusion.status === "skipped") return "";
+  if (conclusion.status !== "generated" || !conclusion.content) {
+    return `<section class="generated-conclusion fallback" data-conclusion-status="${escapeHtml(conclusion.status)}">
+      <div class="conclusion-head"><strong>${t("dataInterpretation")}</strong><span>${t("templateFallback")}</span></div>
+      <p>${escapeHtml(data.answer?.summary ?? data.text ?? t("noResult"))}</p>
+    </section>`;
+  }
+  const content = conclusion.content;
+  const reasons = (content.reasons ?? []).map((reason) => `<li>${escapeHtml(reason.text)}</li>`).join("");
+  const alternatives = (content.alternatives ?? []).map((alternative) => `<li>${escapeHtml(alternative.text)}</li>`).join("");
+  const feedback = state.explanationFeedback;
+  return `<section class="generated-conclusion" data-conclusion-status="generated">
+    <div class="conclusion-head"><strong>${t("dataInterpretation")}</strong><span>${conclusion.cached ? t("cachedConclusion") : t("generatedFromEvidence")}</span></div>
+    <h3>${escapeHtml(content.headline)}</h3>
+    <p>${escapeHtml(content.summary)}</p>
+    ${reasons ? `<ul>${reasons}</ul>` : ""}
+    ${alternatives ? `<details><summary>${t("alternatives")}</summary><ul>${alternatives}</ul></details>` : ""}
+    ${content.nextAction ? `<div class="conclusion-action"><strong>${t("nextAction")}</strong><span>${escapeHtml(content.nextAction)}</span></div>` : ""}
+    ${content.riskNotice ? `<div class="conclusion-risk">${escapeHtml(content.riskNotice)}</div>` : ""}
+    <div class="conclusion-footer"><small>${escapeHtml(conclusion.model ?? "LLM")} · ${formatNumber(conclusion.latencyMs ?? 0)}ms</small><div class="result-feedback" data-explanation-feedback-group><button type="button" class="feedback-button${feedback === "good" ? " selected" : ""}" data-explanation-feedback="good">${t("explanationHelpful")}</button><button type="button" class="feedback-button${feedback === "bad" ? " selected" : ""}" data-explanation-feedback="bad">${t("explanationNotHelpful")}</button><span class="feedback-status">${feedback ? t("recorded") : ""}</span></div></div>
+  </section>`;
+}
+
 function resultHeader(title, summary, kind) {
   return `<header class="result-header-card"><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(summary ?? "")}</p></div><span class="result-kind">${escapeHtml(kind)}</span></header>`;
 }
@@ -873,6 +910,7 @@ function renderItemRankings(data) {
       `).join("")}
     </div>
     <div class="item-ranking-meta">${t("methodology")}：${escapeHtml(data.answer?.methodology ?? "")}</div>
+    ${generatedConclusionCard(data)}
     ${conditionPanel(data)}
     ${sourceAndRisk(data)}
   `);
@@ -917,6 +955,7 @@ function renderRecommendationResult(data) {
     ${commonCore ? `<div class="core-line">${t("frequentCore")}：${escapeHtml(commonCore)}（${t("strictTopThree")}）</div>` : ""}
     ${recommendationCard(data, best, 0)}
     ${alternatives.length ? `<details class="alternatives" ${window.innerWidth >= 520 ? "open" : ""}><summary>${t("alternatives")} · ${alternatives.length}</summary><div class="alternatives-grid">${alternatives.slice(0, 2).map((card, index) => recommendationCard(data, card, index + 1)).join("")}</div></details>` : ""}
+    ${generatedConclusionCard(data)}
     ${conditionPanel(data)}${sourceAndRisk(data)}`);
 }
 
@@ -932,6 +971,7 @@ function renderResult(data) {
   state.lastResult = data;
   state.lastResultId = newResultId();
   state.feedbackByCard = {};
+  state.explanationFeedback = null;
   rawOutputEl.textContent = data.text ?? JSON.stringify(data, null, 2);
   state.lastSuggestions = data.clarification?.suggestions ?? [];
   state.lastEntityCandidates = data.clarification?.entityCandidates ?? [];
@@ -1303,6 +1343,29 @@ async function sendResultFeedback(sentiment, cardIndex) {
   return payload;
 }
 
+async function sendExplanationFeedback(sentiment) {
+  const conclusion = state.lastResult?.answer?.generatedConclusion;
+  if (!conclusion?.content || !state.lastResultId) throw new Error(t("feedbackUnavailable"));
+  const response = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      feedbackType: sentiment === "good" ? "good_explanation" : "bad_explanation",
+      payload: {
+        feedbackId: `${state.lastResultId}:explanation`,
+        input: state.lastInput.slice(0, 500),
+        resultType: state.lastResult?.type ?? null,
+        model: conclusion.model ?? null,
+        cached: Boolean(conclusion.cached),
+        headline: conclusion.content.headline
+      }
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) throw new Error(payload.error ?? t("feedbackSaveFailed"));
+  return payload;
+}
+
 function appendUserMessage(input) {
   const time = new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
   conversationPane.appendUser(escapeHtml(input), `<time>${escapeHtml(time)}</time><strong>${t("you")}</strong>`);
@@ -1371,6 +1434,7 @@ async function requestRecommendation(refresh = false) {
           sort: state.sort,
           days: state.days,
           structuredParserMode: state.structuredParserMode,
+          conclusionMode: state.conclusionMode,
           rankFilter: state.rankFilter
         }
       })
@@ -1420,6 +1484,11 @@ structuredParserModeSelect.addEventListener("change", () => {
   scheduleSavePreferences();
 });
 
+conclusionModeSelect.addEventListener("change", () => {
+  state.conclusionMode = conclusionModeSelect.value;
+  scheduleSavePreferences();
+});
+
 rankControl.addEventListener("change", () => {
   const ranks = selectedRanks();
   if (ranks.length === 0) {
@@ -1466,6 +1535,26 @@ async function handleResultClick(event) {
   }
   if (event.target.closest("[data-refresh-result]")) {
     if (state.lastInput && !state.requestInFlight) requestRecommendation(true);
+    return;
+  }
+  const explanationButton = event.target.closest("button[data-explanation-feedback]");
+  if (explanationButton) {
+    const group = explanationButton.closest("[data-explanation-feedback-group]");
+    const buttons = [...(group?.querySelectorAll("button[data-explanation-feedback]") ?? [])];
+    const status = group?.querySelector(".feedback-status");
+    buttons.forEach((button) => { button.disabled = true; });
+    try {
+      const sentiment = explanationButton.dataset.explanationFeedback;
+      await sendExplanationFeedback(sentiment);
+      state.explanationFeedback = sentiment;
+      explanationButton.classList.add("selected");
+      if (status) status.textContent = t("recorded");
+      setStatusKey("statusRecorded");
+    } catch (error) {
+      buttons.forEach((button) => { button.disabled = false; });
+      if (status) status.textContent = t("saveFailed");
+      setStatus(error.message);
+    }
     return;
   }
   const feedbackButton = event.target.closest("button[data-result-feedback]");
@@ -1559,6 +1648,7 @@ clearButton.addEventListener("click", async () => {
   state.responsesById.clear();
   state.currentResponseId = null;
   state.feedbackByCard = {};
+  state.explanationFeedback = null;
   rawOutputEl.textContent = "";
   resultEl.innerHTML = `<article class="message assistant-message welcome-message"><div class="message-meta"><span class="assistant-avatar" aria-hidden="true">✦</span><strong>TFTAgent</strong></div><div class="message-body">${t("newConversation")}</div></article>`;
   renderEmptyResult();

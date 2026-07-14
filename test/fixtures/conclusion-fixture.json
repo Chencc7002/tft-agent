@@ -1,0 +1,30 @@
+{
+  "type": "unit_build_rankings",
+  "text": "deterministic template answer",
+  "query": {
+    "intent": "unit_build_rankings",
+    "unit": "TFT17_Xayah",
+    "starLevel": [2],
+    "itemPolicy": "ordinary_only",
+    "lockedItems": ["TFT_Item_GuinsoosRageblade"],
+    "excludedItems": [],
+    "days": 3,
+    "rankFilter": ["PLATINUM", "EMERALD", "DIAMOND"],
+    "minSamples": 100,
+    "sort": "top4_first",
+    "assumptions": [{ "key": "star_level", "value": [2], "source": "system_default" }],
+    "warnings": []
+  },
+  "rankedBuilds": [
+    {
+      "items": ["TFT_Item_GuinsoosRageblade", "TFT_Item_InfinityEdge", "TFT_Item_GiantSlayer"],
+      "stats": { "games": 1248, "top4Rate": 0.612, "winRate": 0.183, "avgPlacement": 3.86 }
+    },
+    {
+      "items": ["TFT_Item_GuinsoosRageblade", "TFT_Item_LastWhisper", "TFT_Item_Deathblade"],
+      "stats": { "games": 846, "top4Rate": 0.588, "winRate": 0.205, "avgPlacement": 3.98 }
+    }
+  ],
+  "source": { "provider": "MetaTFT", "cache": "live", "updatedAt": "2026-07-14T00:00:00.000Z" },
+  "cache": { "query": { "hit": false } }
+}

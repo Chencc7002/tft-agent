@@ -116,7 +116,7 @@ function closeServer(server) {
 async function inspectLayout(page, label) {
   const result = await page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
-    const overflowing = [...document.querySelectorAll(".shell, .topbar, .conversation-pane, .result-pane, .settings-panel, .query-panel, .controls, .segmented, .result-card, .comp-card, .ranking-section, .empty-state, .details, .stats, .comparison-decision, .comparison-grid, .comparison-primary")]
+    const overflowing = [...document.querySelectorAll(".shell, .topbar, .conversation-pane, .result-pane, .settings-panel, .query-panel, .controls, .segmented, .result-card, .generated-conclusion, .comp-card, .ranking-section, .empty-state, .details, .stats, .comparison-decision, .comparison-grid, .comparison-primary")]
       .filter((element) => {
         const rect = element.getBoundingClientRect();
         return rect.width > 0 && (rect.left < -1 || rect.right > viewportWidth + 1);
@@ -216,6 +216,21 @@ if (playwright) {
     catalog: createCatalog(),
     cacheStore,
     fetchItems: false,
+    conclusionProvider: async ({ evidence }) => {
+      const primary = evidence.recommendations?.[0];
+      const games = primary?.stats?.games ?? 0;
+      const lowSample = evidence.recommendations?.some((entry) => entry.lowSample);
+      return {
+        schemaVersion: "llm_conclusion.v1",
+        status: "ok",
+        headline: "当前统计证据的行动参考",
+        summary: "以下解读只组织已展示的统计事实，不改变本地排序与比较结果。",
+        reasons: [{ evidenceIds: [primary.evidenceId], text: `当前首条证据包含${games}场样本。` }],
+        alternatives: [],
+        nextAction: "先按结构化结果行动，再结合现有散件选择补齐顺序。",
+        riskNotice: lowSample ? "其中包含低样本结果，仅供参考。" : null
+      };
+    },
     officialItemDetails: new Map([
       ["TFT_Item_GuinsoosRageblade", { iconUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' fill='%2311835b'/%3E%3C/svg%3E" }],
       ["TFT_Item_InfinityEdge", { iconUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' fill='%23b87918'/%3E%3C/svg%3E" }]
@@ -288,6 +303,7 @@ if (playwright) {
     await page.fill("#query-input", "大师以上霞什么三件装备最强？");
     await page.click("#query-form button.primary");
     await page.waitForSelector(".result-card");
+    await page.waitForSelector('.generated-conclusion[data-conclusion-status="generated"]');
     await page.waitForSelector("button.condition-chip");
     const unrestrictedChips = await page.locator("button.condition-chip").allTextContents();
     assertSmoke(
@@ -346,6 +362,7 @@ if (playwright) {
     await page.fill("#query-input", "霞比较羊刀和无尽哪个好？");
     await page.click("#query-form button.primary");
     await page.waitForSelector(".comparison-decision");
+    await page.waitForSelector('.generated-conclusion[data-conclusion-status="generated"]');
     assertSmoke(await page.locator(".comparison-name img").count() === 2, "comparison icons were not rendered");
     const comparison460 = await inspectLayout(page, "460px item comparison");
     await page.screenshot({
@@ -355,6 +372,7 @@ if (playwright) {
 
     await page.setViewportSize({ width: 360, height: 720 });
     const comparison360 = await inspectLayout(page, "360px item comparison");
+    assertSmoke(await page.locator('.generated-conclusion[data-conclusion-status="generated"]').count() === 1, "360px generated conclusion card is missing");
     await page.screenshot({
       path: resolve(outputDir, "comparison-360.png"),
       fullPage: true
