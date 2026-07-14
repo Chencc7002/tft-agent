@@ -3,8 +3,7 @@ export const LOCALE_STORAGE_KEY = "tftagent.locale";
 
 export const messages = {
   "zh-CN": {
-    seasonName: "星神", languageLabel: "语言", settings: "设置", minimize: "最小化", maximize: "最大化", close: "关闭",
-    windowControls: "窗口控制（由桌面壳提供）", statusReady: "就绪", statusQuerying: "查询中", statusRefreshing: "刷新中", statusLive: "实时",
+    seasonName: "星神", languageLabel: "语言", settings: "设置", statusReady: "就绪", statusQuerying: "查询中", statusRefreshing: "刷新中", statusLive: "实时",
     statusCache: "本地缓存", statusStale: "过期缓存", statusFailed: "失败", statusStopped: "已停止", statusCleared: "已清空",
     statusSaved: "已保存", statusNotSaved: "偏好未保存", statusUnavailable: "状态不可用", statusRecorded: "反馈已记录",
     conversationEyebrow: "对话", conversationTitle: "战术查询", conversationHint: "保留多轮条件", resultEyebrow: "数据结果", resultTitle: "当前推荐",
@@ -57,8 +56,7 @@ export const messages = {
     newConversation: "新会话已开始。直接问我英雄出装、单件装备或阵容排行。", waitingQuery: "等待查询", rankCoverage: "{value}%覆盖"
   },
   "en-US": {
-    seasonName: "Cosmic", languageLabel: "Language", settings: "Settings", minimize: "Minimize", maximize: "Maximize", close: "Close",
-    windowControls: "Window controls (provided by the desktop shell)", statusReady: "Ready", statusQuerying: "Querying", statusRefreshing: "Refreshing", statusLive: "Live",
+    seasonName: "Cosmic", languageLabel: "Language", settings: "Settings", statusReady: "Ready", statusQuerying: "Querying", statusRefreshing: "Refreshing", statusLive: "Live",
     statusCache: "Local cache", statusStale: "Stale cache", statusFailed: "Failed", statusStopped: "Stopped", statusCleared: "Cleared",
     statusSaved: "Saved", statusNotSaved: "Preferences not saved", statusUnavailable: "Status unavailable", statusRecorded: "Feedback recorded",
     conversationEyebrow: "Conversation", conversationTitle: "Tactical query", conversationHint: "Multi-turn context", resultEyebrow: "Data result", resultTitle: "Current result",

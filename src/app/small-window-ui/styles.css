@@ -82,7 +82,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
   pointer-events: none;
   background: linear-gradient(155deg, transparent 0 28%, rgba(255,255,255,.28) 28.3% 28.6%, transparent 29% 58%, rgba(255,255,255,.2) 58.3% 58.5%, transparent 59%);
 }
-.brand, .top-actions, .brand-copy, .window-controls { display: flex; align-items: center; }
+.brand, .top-actions, .brand-copy { display: flex; align-items: center; }
 .brand { min-width: 0; gap: 10px; }
 .brand-mark { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; }
 .brand-mark svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.2; filter: drop-shadow(0 0 5px rgba(255,255,255,.7)); }
@@ -91,7 +91,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .brand-copy small { padding: 5px 9px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.13); font-size: 11px; white-space: nowrap; }
 .top-actions { min-width: 0; gap: 9px; }
 
-.icon-button, .window-controls button {
+.icon-button {
   width: 34px;
   height: 34px;
   min-height: 34px;
@@ -118,15 +118,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .status[data-state="stale"] .status-dot { background: var(--warning); }
 .status[data-state="error"] .status-dot { background: #ff8c8c; }
 @keyframes pulse { 50% { opacity: .38; transform: scale(.76); } }
-
-.window-controls { gap: 2px; }
-.window-controls button { width: 27px; height: 30px; min-height: 30px; border-color: transparent; background: transparent; cursor: default; }
-.window-controls button:hover { background: rgba(255,255,255,.1); }
-.window-min { width: 11px; height: 1px; background: currentColor; }
-.window-max { width: 10px; height: 9px; border: 1px solid currentColor; }
-.window-close { position: relative; width: 12px; height: 12px; }
-.window-close::before, .window-close::after { content: ""; position: absolute; top: 5px; left: 0; width: 12px; height: 1px; background: currentColor; transform: rotate(45deg); }
-.window-close::after { transform: rotate(-45deg); }
 
 .workspace {
   position: relative;
@@ -378,7 +369,7 @@ body.resizing-columns { user-select: none; cursor: col-resize; }
   :root { --title-height: 56px; }
   .topbar { padding: 0 10px; gap: 8px; }
   .brand-copy { gap: 6px; }.brand-copy strong { font-size: 15px; }.brand-copy small { padding: 4px 7px; }
-  .top-actions { gap: 5px; }.window-controls { display: none; }.status { max-width: 84px; padding: 0 7px; }.language-toggle button { min-width: 40px; padding: 0 6px; }
+  .top-actions { gap: 5px; }.status { max-width: 84px; padding: 0 7px; }.language-toggle button { min-width: 40px; padding: 0 6px; }
   .workspace, .shell.settings-open .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(230px, 46%) minmax(0, 54%); }
   .conversation-pane { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line-strong); }
   .result-pane { grid-row: 2; }
