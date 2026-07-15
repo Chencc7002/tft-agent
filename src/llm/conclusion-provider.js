@@ -4,6 +4,48 @@ const PROMPT_URL = new URL("./prompts/generate-conclusion.md", import.meta.url);
 export const DEFAULT_CONCLUSION_TIMEOUT_MS = 1800;
 export const DEFAULT_CONCLUSION_MAX_OUTPUT_TOKENS = 350;
 
+const CONCLUSION_RESPONSE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schemaVersion", "status", "headline", "summary", "reasons", "alternatives", "nextAction", "riskNotice"
+  ],
+  properties: {
+    schemaVersion: { type: "string", enum: ["llm_conclusion.v1"] },
+    status: { type: "string", enum: ["ok", "insufficient_evidence"] },
+    headline: { type: "string" },
+    summary: { type: "string" },
+    reasons: {
+      type: "array",
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["evidenceIds", "text"],
+        properties: {
+          evidenceIds: { type: "array", minItems: 1, maxItems: 3, items: { type: "string" } },
+          text: { type: "string" }
+        }
+      }
+    },
+    alternatives: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["evidenceIds", "text"],
+        properties: {
+          evidenceIds: { type: "array", minItems: 1, maxItems: 3, items: { type: "string" } },
+          text: { type: "string" }
+        }
+      }
+    },
+    nextAction: { type: "string" },
+    riskNotice: { anyOf: [{ type: "string" }, { type: "null" }] }
+  }
+};
+
 function positiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -76,8 +118,9 @@ export function resolveConclusionProviderConfig(options = {}, env = process.env)
       model
     ),
     useMaxCompletionTokens: options.useMaxCompletionTokens ?? usesReasoningCompletionTokens(model),
+    useStructuredOutput: options.useStructuredOutput ?? usesReasoningCompletionTokens(model),
     includeResponseFormat: options.includeResponseFormat ?? true,
-    promptVersion: String(options.promptVersion ?? "generate-conclusion.v1"),
+    promptVersion: String(options.promptVersion ?? "generate-conclusion.v4"),
     cacheTtlMs: positiveNumber(options.cacheTtlMs, 30 * 60 * 1000),
     onEvent: options.onEvent
   };
@@ -153,7 +196,18 @@ export function createOpenAICompatibleConclusionProvider(options = {}) {
       body.max_tokens = maxOutputTokens;
     }
     if (options.reasoningEffort) body.reasoning_effort = options.reasoningEffort;
-    if (options.includeResponseFormat !== false) body.response_format = { type: "json_object" };
+    if (options.includeResponseFormat !== false) {
+      body.response_format = (options.useStructuredOutput ?? usesReasoningCompletionTokens(options.model))
+        ? {
+            type: "json_schema",
+            json_schema: {
+              name: "tft_evidence_conclusion",
+              strict: true,
+              schema: CONCLUSION_RESPONSE_SCHEMA
+            }
+          }
+        : { type: "json_object" };
+    }
 
     try {
       const response = await fetchImpl(options.endpoint, {

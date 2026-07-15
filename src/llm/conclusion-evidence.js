@@ -168,6 +168,48 @@ function buildRecommendations(result, catalog) {
   });
 }
 
+function buildItemSignals(recommendations) {
+  const builds = asArray(recommendations).filter((entry) => String(entry?.evidenceId ?? "").startsWith("build:"));
+  if (builds.length < 2) return [];
+  const signals = new Map();
+  for (const build of builds) {
+    const seenInBuild = new Set();
+    for (const item of asArray(build.items)) {
+      if (!item?.apiName || seenInBuild.has(item.apiName)) continue;
+      seenInBuild.add(item.apiName);
+      const signal = signals.get(item.apiName) ?? {
+        item,
+        appearances: 0,
+        firstRank: build.rank,
+        buildEvidenceIds: [],
+        stable: true
+      };
+      signal.appearances += 1;
+      signal.firstRank = Math.min(signal.firstRank, build.rank);
+      signal.buildEvidenceIds.push(build.evidenceId);
+      signal.stable = signal.stable && build.stable === true;
+      signals.set(item.apiName, signal);
+    }
+  }
+  return [...signals.values()]
+    .map((signal) => ({
+      ...signal,
+      recommendationCount: builds.length,
+      appearanceRate: Number((signal.appearances / builds.length).toFixed(3)),
+      core: signal.appearances >= 2,
+      lowSample: !signal.stable
+    }))
+    .sort((left, right) => Number(right.core) - Number(left.core)
+      || right.appearances - left.appearances
+      || left.firstRank - right.firstRank
+      || left.item.apiName.localeCompare(right.item.apiName))
+    .map(({ firstRank, ...signal }, index) => ({
+      evidenceId: `item-signal:${index + 1}`,
+      kind: "item_core_signal",
+      ...signal
+    }));
+}
+
 function buildItemRankings(result, catalog) {
   return asArray(result?.itemRankings).slice(0, 3).map((entry, index) => {
     const lowSample = Boolean(entry.lowSample || lowSampleFor(entry.stats, result?.query));
@@ -293,6 +335,7 @@ export function buildConclusionEvidence({ result, catalog, input = "", locale = 
     : intent === "comp_rankings"
       ? buildCompRankings(result)
       : comparison?.options ?? buildRecommendations(result, catalog);
+  const itemSignals = intent === "unit_build_rankings" ? buildItemSignals(recommendations) : [];
   const dataStatus = sourceState(result);
   const warnings = buildWarnings(result);
   const hasLowSample = recommendations.some((entry) => entry.lowSample);
@@ -309,12 +352,15 @@ export function buildConclusionEvidence({ result, catalog, input = "", locale = 
     },
     query: buildQuery(result, catalog),
     recommendations,
+    itemSignals,
     comparison,
     warnings,
     dataStatus,
     generationRules: {
       factsMustComeFromEvidence: true,
       forbidCausalClaims: true,
+      coreClaimsRequireItemSignal: true,
+      mustQualifyUnstableCore: itemSignals.some((entry) => entry.core && !entry.stable),
       mustMentionLowSample: hasLowSample,
       mustMentionStaleData: dataStatus.cache === "stale",
       mustAvoidWinnerClaim: unresolvedComparison

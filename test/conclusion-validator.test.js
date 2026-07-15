@@ -30,6 +30,33 @@ test("validateConclusionOutput accepts evidence-linked names and exact metrics",
   assert.equal(result.value.reasons[0].evidenceIds[0], "build:1");
 });
 
+test("validateConclusionOutput accepts only evidence-linked core-item claims", () => {
+  const valid = validOutput({
+    summary: "羊刀在当前前列方案中重复出现，可视为核心装备趋势（item-signal:1; build:1）；首套完整方案还包含无尽与巨杀，且stable为真。",
+    reasons: [{ evidenceIds: ["item-signal:1"], text: "羊刀在两套推荐中都出现，出现率100.0%，是当前统计口径下的核心装备趋势（core=true）。" }]
+  });
+  const validResult = validateConclusionOutput(valid, evidence, { catalog });
+  assert.equal(validResult.valid, true);
+  assert.doesNotMatch(validResult.value.reasons[0].text, /core=/u);
+  assert.doesNotMatch(validResult.value.summary, /(?:build|item-signal):/u);
+  assert.doesNotMatch(validResult.value.summary, /stable/u);
+  assert.match(validResult.value.summary, /被标记为稳定/u);
+
+  const wrongLink = validOutput({
+    reasons: [{ evidenceIds: ["build:1"], text: "羊刀是当前统计口径下的核心装备。" }]
+  });
+  assert.equal(validateConclusionOutput(wrongLink, evidence, { catalog }).valid, false);
+
+  const promotedNonCore = validOutput({ summary: "无尽是当前前列方案的核心装备。" });
+  assert.equal(validateConclusionOutput(promotedNonCore, evidence, { catalog }).valid, false);
+
+  const absolute = validOutput({ nextAction: "羊刀是必备装备，优先合成。" });
+  assert.equal(validateConclusionOutput(absolute, evidence, { catalog }).valid, false);
+
+  const qualified = validOutput({ nextAction: "羊刀不是必备装备，仍需根据散件选择。" });
+  assert.equal(validateConclusionOutput(qualified, evidence, { catalog }).valid, true);
+});
+
 test("validateConclusionOutput rejects unknown evidence, fabricated metrics, entities, and causal claims", () => {
   const cases = [
     validOutput({ reasons: [{ evidenceIds: ["build:99"], text: "样本1248场。" }] }),
