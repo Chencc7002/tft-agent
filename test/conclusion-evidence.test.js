@@ -26,6 +26,13 @@ test("buildConclusionEvidence creates a bounded whitelist pack with raw metrics"
   assert.equal(evidence.recommendations[0].evidenceId, "build:1");
   assert.equal(evidence.recommendations[0].stats.top4Rate, 0.612);
   assert.equal(evidence.recommendations[0].stats.games, 1248);
+  assert.equal(evidence.itemSignals[0].kind, "item_core_signal");
+  assert.equal(evidence.itemSignals[0].item.apiName, "TFT_Item_GuinsoosRageblade");
+  assert.equal(evidence.itemSignals[0].appearances, 2);
+  assert.equal(evidence.itemSignals[0].recommendationCount, 2);
+  assert.equal(evidence.itemSignals[0].core, true);
+  assert.equal(evidence.itemSignals[0].stable, true);
+  assert.deepEqual(evidence.itemSignals[0].buildEvidenceIds, ["build:1", "build:2"]);
   assert.equal(evidence.query.lockedItems[0].apiName, "TFT_Item_GuinsoosRageblade");
   assert.ok(evidence.query.lockedItems[0].name);
   const serialized = serializeConclusionEvidence(evidence);
@@ -34,6 +41,20 @@ test("buildConclusionEvidence creates a bounded whitelist pack with raw metrics"
   assert.match(serialized, /redacted-secret/u);
   assert.match(serialized, /redacted-path/u);
   assert.match(serialized, /redacted-url/u);
+});
+
+test("buildConclusionEvidence marks repeated items as low-sample core trends when linked builds are unstable", () => {
+  const result = buildResult();
+  result.rankedBuilds = result.rankedBuilds.map((build) => ({
+    ...build,
+    stats: { ...build.stats, games: 120 }
+  }));
+  const evidence = buildConclusionEvidence({ result, catalog, input: "霞怎么出装？" });
+  assert.equal(evidence.itemSignals[0].core, true);
+  assert.equal(evidence.itemSignals[0].stable, false);
+  assert.equal(evidence.itemSignals[0].lowSample, true);
+  assert.equal(evidence.generationRules.mustQualifyUnstableCore, true);
+  assert.equal(evidence.generationRules.mustMentionLowSample, true);
 });
 
 test("buildConclusionEvidence only includes requested comparison options and preserves no-winner state", () => {

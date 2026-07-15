@@ -4,9 +4,10 @@ const ROOT_KEYS = new Set([
   "schemaVersion", "status", "headline", "summary", "reasons", "alternatives", "nextAction", "riskNotice"
 ]);
 const ENTRY_KEYS = new Set(["evidenceIds", "text"]);
-const ABSOLUTE_OR_CAUSAL = /(?:必定|必然|保证|稳操胜券|唯一最强|绝对最强|百分之百|100%胜率|导致(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加)|使(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加))/u;
+const ABSOLUTE_OR_CAUSAL = /(?:(?<!不)(?<!未)必定|(?<!不)(?<!未)必然|(?<!不)(?<!不能)(?<!无法)(?<!难以)(?<!不可)保证|(?<!非)(?<!不是)(?<!并非)(?<!不能视为)必备|(?<!非)(?<!不是)(?<!并非)必出|必须出|稳操胜券|唯一(?:最强|核心)|绝对最强|百分之百|100%胜率|导致(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加)|使(?:胜率|前四率|登顶率).{0,8}(?:提高|提升|增加))/u;
 const WINNER_CLAIM = /(?:更优|胜出|优于|领先|最佳|首选|更好|最强)/u;
 const LOW_SAMPLE_CLAIM = /(?:低样本|样本(?:量)?不足|不能视为稳定推荐|不稳定推荐)/u;
+const CORE_CLAIM = /核心(?:装备|装|选择|趋势|倾向|单件)/u;
 const API_NAME = /\bTFT\w*_[A-Za-z0-9_]+\b/gu;
 const QUOTED_ENTITY = /[“"]([^”"\n]{1,24}(?:刀|弓|剑|甲|杖|冠|拳|刃|矛|锤|盾|盔|铠|爪|枪|炮|帽|纹章|徽章))[”"]/gu;
 
@@ -20,13 +21,27 @@ function unknownKeys(value, allowed, path, errors) {
   }
 }
 
+function naturalizeTechnicalTerms(value) {
+  return String(value)
+    .replace(/\s*[（(]\s*(?:(?:build|item-signal):\d+\s*(?:[;,，；、/]|与|和)?\s*)+[)）]/giu, "")
+    .replace(/\s*[（(]\s*core\s*=\s*(?:true|false)\s*[)）]/giu, "")
+    .replace(/(?:为\s*)?core\s*=\s*true\b/giu, "属于核心信号")
+    .replace(/(?:为\s*)?core\s*=\s*false\b/giu, "属于非核心信号")
+    .replace(/\brecommendationCount\b/gu, "推荐方案数")
+    .replace(/\bappearanceRate\b/gu, "出现比例")
+    .replace(/\bstable\s*(?:=|为)\s*(?:true|真)(?=$|[\s,，。；;）)])/giu, "被标记为稳定")
+    .replace(/\bstable\s*(?:=|为)\s*(?:false|假)(?=$|[\s,，。；;）)])/giu, "被标记为不稳定")
+    .replace(/\blowSample\s*(?:=|为)\s*(?:true|真)(?=$|[\s,，。；;）)])/giu, "被标记为低样本")
+    .replace(/\blowSample\s*(?:=|为)\s*(?:false|假)(?=$|[\s,，。；;）)])/giu, "未标记为低样本");
+}
+
 function readText(value, path, limit, errors, { nullable = false } = {}) {
   if (nullable && value === null) return null;
   if (typeof value !== "string") {
     errors.push(`${path} must be a string${nullable ? " or null" : ""}`);
     return "";
   }
-  const text = value.trim();
+  const text = naturalizeTechnicalTerms(value).trim();
   if (!text) errors.push(`${path} must not be empty`);
   if (text.length > limit) errors.push(`${path} exceeds ${limit} characters`);
   return text;
@@ -35,6 +50,9 @@ function readText(value, path, limit, errors, { nullable = false } = {}) {
 function evidenceRecords(evidence) {
   const records = new Map();
   for (const record of evidence?.recommendations ?? []) {
+    if (record?.evidenceId) records.set(record.evidenceId, record);
+  }
+  for (const record of evidence?.itemSignals ?? []) {
     if (record?.evidenceId) records.set(record.evidenceId, record);
   }
   for (const record of evidence?.comparison?.options ?? []) {
@@ -105,6 +123,7 @@ function statsFor(records) {
 function validateNumbers(text, records, path, errors) {
   const stats = statsFor(records);
   const rates = stats.flatMap((entry) => [entry.top4Rate, entry.winRate, entry.pickRate])
+    .concat([...records].map((record) => record?.appearanceRate))
     .filter(Number.isFinite)
     .map((value) => Number((value * 100).toFixed(1)));
   const games = stats.map((entry) => Number(entry.games)).filter(Number.isFinite);
@@ -142,8 +161,36 @@ function validateNames(text, names, knownCatalogNames, path, errors) {
   }
 }
 
+function escapedPattern(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function describesItemAsCore(text, item) {
+  return [item?.apiName, item?.name].filter(Boolean).some((name) => {
+    const escaped = escapedPattern(name);
+    return new RegExp(`(?:${escaped}(?:是|为|可视为|作为).{0,20}核心(?:装备|装|选择|趋势|倾向|单件)|核心(?:装备|装|选择|趋势|倾向|单件)(?:是|为|包括|包含|[:：])?\\s*${escaped})`, "u").test(text);
+  });
+}
+
+function validateCoreClaim(text, records, evidence, path, errors) {
+  if (!CORE_CLAIM.test(text)) return;
+  const allSignals = evidence?.itemSignals ?? [];
+  const scopedSignals = [...records].filter((record) => record?.kind === "item_core_signal");
+  const entryScoped = /^(?:reasons|alternatives)\[/u.test(path);
+  const allowedSignals = entryScoped ? scopedSignals : allSignals;
+  if (!allowedSignals.some((signal) => signal.core === true)) {
+    errors.push(`${path} contains a core-item claim without a linked core signal`);
+  }
+  for (const signal of allSignals) {
+    if (signal.core !== true && describesItemAsCore(text, signal.item)) {
+      errors.push(`${path} describes a non-core item as core: ${signal.item?.name ?? signal.item?.apiName}`);
+    }
+  }
+}
+
 function validateTextFacts(text, records, evidence, catalog, path, errors) {
   if (ABSOLUTE_OR_CAUSAL.test(text)) errors.push(`${path} contains an absolute or causal claim`);
+  validateCoreClaim(text, records, evidence, path, errors);
   const names = allowedNames(evidence, records);
   validateNames(text, names, catalogNames(catalog), path, errors);
   validateNumbers(text, records, path, errors);

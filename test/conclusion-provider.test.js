@@ -44,6 +44,7 @@ test("OpenAI-compatible conclusion provider sends only the evidence request and 
   assert.doesNotMatch(request.init.body, /secret-key|provider\.example/u);
   assert.equal(body.max_tokens, 350);
   assert.equal(body.max_completion_tokens, undefined);
+  assert.equal(body.response_format.type, "json_object");
 });
 
 test("GPT-5 conclusion config uses a minimal reasoning budget and completion-token parameter", async () => {
@@ -69,6 +70,12 @@ test("GPT-5 conclusion config uses a minimal reasoning budget and completion-tok
   assert.equal(body.max_completion_tokens, 350);
   assert.equal(body.max_tokens, undefined);
   assert.equal(body.reasoning_effort, "minimal");
+  assert.equal(body.response_format.type, "json_schema");
+  assert.equal(body.response_format.json_schema.strict, true);
+  assert.deepEqual(body.response_format.json_schema.schema.required, [
+    "schemaVersion", "status", "headline", "summary", "reasons", "alternatives", "nextAction", "riskNotice"
+  ]);
+  assert.equal(body.response_format.json_schema.schema.additionalProperties, false);
 });
 
 test("OpenAI-compatible conclusion provider rejects Markdown-wrapped JSON", async () => {
