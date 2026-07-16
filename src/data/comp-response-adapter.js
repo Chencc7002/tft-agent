@@ -200,6 +200,11 @@ function placementStats(places, totalGames) {
     games,
     top4Rate: top4 / games,
     winRate: placementCount[0] / games,
+    // MetaTFT's "Win Share": this comp's wins divided by all lobby wins.
+    // totalGames counts player placements, so there is one winner per 8 rows.
+    winShare: Number.isFinite(totalGames) && totalGames > 0
+      ? placementCount[0] / (totalGames / 8)
+      : null,
     avgPlacement: placementSum / games,
     pickRate: Number.isFinite(totalGames) && totalGames > 0 ? games / totalGames : null,
     placementCount

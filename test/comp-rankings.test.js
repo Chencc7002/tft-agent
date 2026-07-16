@@ -23,7 +23,7 @@ const fixture = JSON.parse(await readFile(
 
 function query(overrides = {}) {
   return {
-    metrics: ["top4_rate", "win_rate", "avg_placement", "popularity"],
+    metrics: ["top4_rate", "win_rate", "win_share", "avg_placement", "popularity"],
     limit: 10,
     minSamples: 1,
     patch: "current",
@@ -41,11 +41,13 @@ function ids(values) {
 test("rule parser recognizes comp leaderboard questions without inventing a unit", () => {
   const strongest = parseQuery("当前版本最强阵容有哪些？");
   assert.equal(strongest.intent, "comp_rankings");
-  assert.deepEqual(strongest.metrics, ["top4_rate", "win_rate"]);
+  assert.deepEqual(strongest.metrics, ["top4_rate", "win_share"]);
+  assert.equal(strongest.limit, 5);
   assert.equal(strongest.unit, undefined);
   assert.deepEqual(parseQuery("前四率最高的三个阵容").metrics, ["top4_rate"]);
   assert.equal(parseQuery("前四率最高的三个阵容").limit, 3);
   assert.deepEqual(parseQuery("登顶率最高的阵容").metrics, ["win_rate"]);
+  assert.deepEqual(parseQuery("吃鸡份额最高的阵容").metrics, ["win_share"]);
   assert.deepEqual(parseQuery("最热门的阵容").metrics, ["popularity"]);
   assert.deepEqual(parseQuery("平均名次最好的阵容").metrics, ["avg_placement"]);
 });
@@ -62,6 +64,7 @@ test("page response adapters preserve cluster identity and compute the same publ
   assert.equal(row.stats.games, 1000);
   assert.equal(row.stats.top4Rate, 0.8);
   assert.equal(row.stats.winRate, 0.2);
+  assert.equal(row.stats.winShare, 0.016);
   assert.equal(row.stats.avgPlacement, 3.3);
   assert.equal(row.stats.pickRate, 0.01);
 });
@@ -93,7 +96,7 @@ test("comp rankings preserve MetaTFT's per-comp three-day placement change and s
   assert.equal(normalized.definitions.find((row) => row.clusterId === "409002").avgPlacementChange, -0.31);
 
   const result = buildCompRankings(response, { query: query({ minSamples: 1 }), catalog: createCatalog() });
-  assert.deepEqual(ids(result.improving), ["409003", "409002"]);
+  assert.deepEqual(ids(result.improving), ["409002", "409003"]);
   assert.equal(result.improving[0].trend.improving, true);
   assert.equal(result.improving.find((comp) => comp.source.clusterId === "409002").trend.avgPlacementChange, -0.31);
   assert.equal(result.improving.some((comp) => comp.source.clusterId === "409019"), false);
@@ -124,7 +127,7 @@ test("daily comp trends reproduce MetaTFT's cold-start three-day improvement val
   assert.equal(Number(delta("409003").toFixed(2)), -0.18);
 
   const result = buildCompRankings(response, { query: query({ minSamples: 1 }), catalog: createCatalog() });
-  assert.deepEqual(ids(result.improving), ["409019", "409003", "409002"]);
+  assert.deepEqual(ids(result.improving), ["409019", "409002", "409003"]);
   assert.ok(result.improving.every((comp) => comp.trend.source === "metatft"));
   assert.ok(result.improving.every((comp) => comp.trend.comparedAt === "2026-07-13T00:00:00.000Z"));
 
@@ -166,6 +169,7 @@ test("offline rankings match MetaTFT page filtering and ordering for every suppo
   assert.deepEqual(ids(result.rankings.avgPlacement), fixture.expected.avgPlacement);
   assert.deepEqual(ids(result.rankings.top4Rate), fixture.expected.top4Rate);
   assert.deepEqual(ids(result.rankings.winRate), fixture.expected.winRate);
+  assert.deepEqual(ids(result.rankings.winShare), fixture.expected.winShare);
   assert.deepEqual(ids(result.rankings.popularity), fixture.expected.popularity);
   assert.deepEqual(
     [...new Set(Object.values(result.rankings).flat().map((comp) => comp.source.clusterId))].sort(),
@@ -263,7 +267,7 @@ test("a cold-start comp trend query immediately exposes MetaTFT's official top t
   assert.equal(result.type, "comp_rankings");
   assert.equal(result.cache.query.hit, false);
   assert.equal(result.trend.status, "upstream");
-  assert.deepEqual(ids(result.improving), ["409019", "409003", "409002"]);
+  assert.deepEqual(ids(result.improving), ["409002", "409003", "409019"]);
   assert.deepEqual(
     Object.fromEntries(result.improving.map((comp) => [comp.source.clusterId, comp.trend.avgPlacementChange])),
     { "409019": -0.14, "409003": -0.22, "409002": -0.31 }
@@ -416,7 +420,7 @@ test("structured parser schema accepts only controlled comp metrics", () => {
     constraints: {
       star_level: [], item_count: null, item_policy: null, owned_items: [], excluded_items: [],
       min_samples: 500, sort: null, rank_filter: [], days: 3, patch: "current", queue: "1100",
-      metrics: ["top4_rate", "win_rate"], limit: 3
+      metrics: ["top4_rate", "win_rate", "win_share"], limit: 3
     },
     needs_clarification: false,
     clarification_question: null

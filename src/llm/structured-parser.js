@@ -12,6 +12,7 @@ const VALID_INTENTS = new Set([
 const VALID_COMP_METRICS = new Set([
   "top4_rate",
   "win_rate",
+  "win_share",
   "avg_placement",
   "popularity"
 ]);

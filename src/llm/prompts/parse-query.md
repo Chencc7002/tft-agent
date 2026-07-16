@@ -52,7 +52,7 @@ Rules:
 - Use `min_samples=0` when the user explicitly removes or disables the sample threshold. Do not replace an explicit zero with a default value.
 - Leave unknown or unsupported fields empty instead of guessing.
 - Valid `intent` values are `unit_build_rankings`, `unit_item_rankings`, `unit_build_completion`, `unit_item_comparison`, `unit_item_availability`, `clarification`, and `comp_rankings`. `unit_best_3_items` remains a legacy-compatible alias for `unit_build_rankings`.
-- For `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-10. Parse only; never generate, rank, or score comps.
+- For `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `win_share`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-10. `win_share` means the share of all lobby wins, while `win_rate` means wins divided by games for that comp. Parse only; never generate, rank, or score comps.
 - For non-comp intents, leave `metrics` empty and `limit` null.
 - Valid `item_policy` values are `ordinary_only`, `include_radiant`, `include_artifact`, and `include_special`.
 - Valid `sort` values are `top4_first`, `win_first`, `robust_first`, `avg_first`, and `games_first`.

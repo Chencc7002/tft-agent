@@ -4,6 +4,7 @@ import { normalizeText } from "./normalizer.js";
 export const COMP_METRICS = Object.freeze([
   "top4_rate",
   "win_rate",
+  "win_share",
   "avg_placement",
   "popularity"
 ]);
@@ -26,11 +27,12 @@ export function parseCompMetrics(input) {
   const text = normalizeText(input);
   const metrics = [];
   if (/(前四|稳|上分|稳定)/.test(text)) metrics.push("top4_rate");
-  if (/(登顶|吃鸡|第一)/.test(text)) metrics.push("win_rate");
+  if (/(吃鸡份额|登顶份额|胜场份额)/.test(text)) metrics.push("win_share");
+  if (/(登顶|吃鸡|第一)(?!份额)/.test(text)) metrics.push("win_rate");
   if (/(平均名次|均名)/.test(text)) metrics.push("avg_placement");
   if (/(热门|热度|最多人玩|选择率)/.test(text)) metrics.push("popularity");
   if (metrics.length === 0 && /(最强|阵容)/.test(text)) {
-    metrics.push("top4_rate", "win_rate");
+    metrics.push("top4_rate", "win_share");
   }
   return unique(metrics);
 }
@@ -38,6 +40,7 @@ export function parseCompMetrics(input) {
 function parseLimit(input) {
   const text = normalizeText(input);
   const match = text.match(/([1-9]|10|一|二|三|四|五|六|七|八|九|十)套/)
+    ?? text.match(/([1-9]|10|一|二|三|四|五|六|七|八|九|十)个(?:阵容)?/)
     ?? text.match(/前([1-9]|10|一|二|三|四|五|六|七|八|九|十)(?:个|名)/);
   const chinese = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
   const value = match ? Number(match[1]) || chinese[match[1]] : undefined;
@@ -92,8 +95,8 @@ export function buildCompRankingQuery(parsed = {}, options = {}) {
   const trendRequested = Boolean(parsed.trendRequested);
   return {
     intent: "comp_rankings",
-    metrics: metrics.length > 0 ? metrics : ["top4_rate", "win_rate"],
-    limit: Math.min(10, Math.max(1, Number(parsed.limit ?? 3))),
+    metrics: metrics.length > 0 ? metrics : ["top4_rate", "win_share"],
+    limit: Math.min(10, Math.max(1, Number(parsed.limit ?? 5))),
     minSamples: Math.max(0, Number(parsed.minSamples ?? options.minSamples ?? preferences.minSamples ?? 500)),
     days: Number(parsed.days ?? (trendRequested ? 3 : preferences.days) ?? 3),
     patch: String(parsed.patch ?? preferences.patch ?? "current"),

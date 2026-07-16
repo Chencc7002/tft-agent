@@ -207,6 +207,8 @@ test("result templates cover recommendations, item rankings, comps, risks, and e
   assert.match(appJs, /function renderRecommendationResult/);
   assert.match(appJs, /function renderItemRankings/);
   assert.match(appJs, /function renderCompRankings/);
+  assert.match(appJs, /renderCompCard\(comp, "trend", index\)/);
+  assert.match(appJs, /winShareHighest/);
   assert.match(appJs, /class="best-label"/);
   assert.match(appJs, /class="alternatives"/);
   assert.match(appJs, /card\.lowSample/);

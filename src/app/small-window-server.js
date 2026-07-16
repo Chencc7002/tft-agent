@@ -1102,12 +1102,16 @@ function serializeCompRankings(result, meta = {}) {
         games: comp.stats?.games ?? 0,
         top4Rate: Number.isFinite(comp.stats?.top4Rate) ? comp.stats.top4Rate : null,
         winRate: Number.isFinite(comp.stats?.winRate) ? comp.stats.winRate : null,
+        winShare: Number.isFinite(comp.stats?.winShare) ? comp.stats.winShare : null,
         avgPlacement: Number.isFinite(comp.stats?.avgPlacement) ? comp.stats.avgPlacement : null,
         pickRate: Number.isFinite(comp.stats?.pickRate) ? comp.stats.pickRate : null
       },
       trend: {
         avgPlacementChange: Number.isFinite(comp.trend?.avgPlacementChange)
           ? comp.trend.avgPlacementChange
+          : null,
+        emergenceScore: Number.isFinite(comp.trend?.emergenceScore)
+          ? comp.trend.emergenceScore
           : null,
         improving: Boolean(comp.trend?.improving),
         source: comp.trend?.source ?? null,
@@ -1681,17 +1685,22 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
     }
   }
 
-  const generatedConclusion = await generateEvidenceBackedConclusion({
-    result,
-    catalog,
-    input,
-    previousQuery: previousSessionEntry?.value?.query ?? previousSessionEntry?.value ?? null,
-    config: requestRuntime.conclusionGeneratorConfig,
-    provider: requestRuntime.conclusionProvider,
-    cacheStore: runtime.cacheStore,
-    requestEnabled: preferences.conclusionMode !== "off",
-    bypassCache: Boolean(body.refresh)
-  });
+  // Comp rankings are already an evidence-first dashboard. Keep this route
+  // deterministic and avoid spending an LLM request until its conclusion UX
+  // is explicitly re-enabled.
+  const generatedConclusion = result.type === "comp_rankings"
+    ? { status: "skipped", reason: "comp_rankings_disabled" }
+    : await generateEvidenceBackedConclusion({
+      result,
+      catalog,
+      input,
+      previousQuery: previousSessionEntry?.value?.query ?? previousSessionEntry?.value ?? null,
+      config: requestRuntime.conclusionGeneratorConfig,
+      provider: requestRuntime.conclusionProvider,
+      cacheStore: runtime.cacheStore,
+      requestEnabled: preferences.conclusionMode !== "off",
+      bypassCache: Boolean(body.refresh)
+    });
 
   const payload = serializeRecommendation(result, catalog, {
     durationMs: Date.now() - startedAt,

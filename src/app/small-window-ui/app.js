@@ -371,6 +371,7 @@ function compMetricLabel(key) {
   return {
     top4Rate: t("top4Highest"),
     winRate: t("winHighest"),
+    winShare: t("winShareHighest"),
     avgPlacement: t("avgBest"),
     popularity: t("mostPopular")
   }[key] ?? key;
@@ -378,6 +379,8 @@ function compMetricLabel(key) {
 
 function compPrimaryMetric(key, comp) {
   if (key === "winRate") return `${t("winShort")} ${rate(comp.stats?.winRate)}`;
+  if (key === "winShare") return `${t("winShareShort")} ${rate(comp.stats?.winShare)}`;
+  if (key === "trend") return `↟ ${t("avgPlacementImproved", { value: Math.abs(comp.trend?.avgPlacementChange ?? 0).toFixed(2) })}`;
   if (key === "avgPlacement") return `${t("avgShort")} ${placement(comp.stats?.avgPlacement)}`;
   if (key === "popularity") return `${t("samples")} ${formatNumber(comp.stats?.games ?? 0)}`;
   return `${t("top4Short")} ${rate(comp.stats?.top4Rate)}`;
@@ -436,8 +439,12 @@ function renderCompCard(comp, metricKey, index) {
   const mainTraits = (comp.traits ?? []).filter((trait) => !/UniqueTrait|SummonTrait/.test(trait.filterId ?? trait.apiName)).slice(0, 3);
   const coreUnits = (comp.units ?? []).filter((unit) => unit.core).slice(0, 4);
   const foldedUnits = coreUnits.length ? coreUnits : (comp.units ?? []).slice(0, 5);
+  const appearanceRate = hasNumericValue(comp.stats?.pickRate) ? Number(comp.stats.pickRate) * 8 : null;
+  const metricSubline = metricKey === "trend"
+    ? `${t("appearanceShort")} ${rate(appearanceRate)} · ${formatNumber(comp.stats?.games ?? 0)} ${t("games")}`
+    : `${formatNumber(comp.stats?.games ?? 0)} ${t("games")}`;
   return `
-    <details class="comp-card" ${index === 0 ? "open" : ""}>
+    <details class="comp-card" data-variant="${metricKey === "trend" ? "trend" : "ranking"}" ${index === 0 ? "open" : ""}>
       <summary>
         <div class="comp-summary-main">
           <strong>${escapeHtml(localizedName(comp))}</strong>
@@ -447,15 +454,18 @@ function renderCompCard(comp, metricKey, index) {
         </div>
         <div class="comp-summary-metric">
           <b>${escapeHtml(compPrimaryMetric(metricKey, comp))}</b>
-          <span>${formatNumber(comp.stats?.games ?? 0)} ${t("games")}</span>
+          <span>${escapeHtml(metricSubline)}</span>
         </div>
       </summary>
       <div class="comp-expanded">
         <div class="comp-stat-line">
           <span>${t("top4Short")} ${rate(comp.stats?.top4Rate)}</span>
           <span>${t("winShort")} ${rate(comp.stats?.winRate)}</span>
+          <span>${t("winShareShort")} ${rate(comp.stats?.winShare)}</span>
           <span>${t("avgShort")} ${placement(comp.stats?.avgPlacement)}</span>
+          <span>${t("appearanceShort")} ${rate(appearanceRate)}</span>
         </div>
+        ${metricKey === "trend" ? `<div class="trend-model-line"><span>${escapeHtml(compTrendSourceLabel(comp))}</span><span>${t("emergingScore")} ${formatNumber(comp.trend?.emergenceScore ?? 0, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</span><small>${t("emergingFormula")}</small></div>` : ""}
         <div class="full-unit-grid">${(comp.units ?? []).map((unit) => renderCompUnit(unit, true)).join("")}</div>
         <div class="full-trait-row">${(comp.traits ?? []).map((trait) => `<span>${assetThumb(trait.iconUrl, compTraitLabel(trait), "trait-icon")}<small>${escapeHtml(compTraitLabel(trait))}</small></span>`).join("")}</div>
         <div class="comp-source">${t("sourceLabel")}：MetaTFT /comps_stats${comp.source?.clusterId ? ` / cluster ${escapeHtml(comp.source.clusterId)}` : ""} / ${escapeHtml(compUpdatedLabel(comp.source?.updatedAt))}</div>
@@ -488,10 +498,9 @@ function renderCompRankings(data) {
     </div>
     ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
     ${renderCompTrendNotice(data, improving)}
-    ${improving.length ? `<section class="ranking-section improving-section"><h2>${t("improvingComps")}</h2>${improving.map((comp) => `<div class="improving-comp"><span class="improving-arrow" aria-hidden="true">↟</span><strong>${escapeHtml(localizedName(comp))}</strong><span>${t("avgPlacementImproved", { value: escapeHtml(Math.abs(comp.trend?.avgPlacementChange ?? 0).toFixed(2)) })}</span><small class="trend-source">${escapeHtml(compTrendSourceLabel(comp))}</small>${comp.lowSample ? `<small>${t("lowSample")}</small>` : ""}</div>`).join("")}</section>` : ""}
+    ${improving.length ? `<section class="ranking-section improving-section"><h2>${t("improvingComps")}</h2><p class="trend-method">${t("emergingFormula")}</p>${improving.map((comp, index) => renderCompCard(comp, "trend", index)).join("")}</section>` : ""}
     ${sections.map(([key, comps]) => `<section class="ranking-section"><h2>${escapeHtml(compMetricLabel(key))}</h2>${comps.map((comp, index) => renderCompCard(comp, key, index)).join("")}</section>`).join("")}
     ${references.length ? `<section class="ranking-section low-sample-section"><h2>${t("lowSampleSection")}</h2>${references.map((comp, index) => renderCompCard(comp, "popularity", index)).join("")}</section>` : ""}
-    ${generatedConclusionCard(data)}
     <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
 }
 

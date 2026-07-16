@@ -517,8 +517,9 @@ test("handleRecommendRequest serializes comp rankings without leaking raw rows",
 
   assert.equal(statusCode, 200);
   assert.equal(payload.type, "comp_rankings");
-  assert.equal(payload.rankings.popularity.length, 3);
+  assert.equal(payload.rankings.popularity.length, 4);
   assert.equal(payload.rankings.popularity[0].stats.games, 2000);
+  assert.equal(typeof payload.rankings.popularity[0].stats.winShare, "number");
   assert.ok(payload.rankings.popularity[0].traits.some((trait) => trait.tier === 2));
   assert.deepEqual(payload.references, []);
   assert.equal("raw" in payload.rankings.popularity[0], false);
@@ -529,7 +530,7 @@ test("handleRecommendRequest serializes comp rankings without leaking raw rows",
     preferences: { minSamples: 100000 }
   }, runtime);
   assert.equal(lowSample.payload.rankings.popularity.length, 0);
-  assert.equal(lowSample.payload.references.length, 3);
+  assert.equal(lowSample.payload.references.length, 4);
   assert.ok(lowSample.payload.references.every((comp) => comp.lowSample));
 });
 
