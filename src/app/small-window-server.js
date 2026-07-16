@@ -1105,6 +1105,14 @@ function serializeCompRankings(result, meta = {}) {
         avgPlacement: Number.isFinite(comp.stats?.avgPlacement) ? comp.stats.avgPlacement : null,
         pickRate: Number.isFinite(comp.stats?.pickRate) ? comp.stats.pickRate : null
       },
+      trend: {
+        avgPlacementChange: Number.isFinite(comp.trend?.avgPlacementChange)
+          ? comp.trend.avgPlacementChange
+          : null,
+        improving: Boolean(comp.trend?.improving),
+        source: comp.trend?.source ?? null,
+        comparedAt: comp.trend?.comparedAt ?? null
+      },
       source: comp.source
     });
   const rankings = {};
@@ -1115,7 +1123,9 @@ function serializeCompRankings(result, meta = {}) {
     ok: true,
     type: "comp_rankings",
     rankings,
+    improving: (result.improving ?? []).map(serializeComp),
     references: (result.references ?? []).map(serializeComp),
+    trend: result.trend ?? null,
     query: result.query,
     source: result.source,
     warnings: result.warnings ?? [],

@@ -465,6 +465,7 @@ export function parseQuery(input, options = {}) {
     metrics: compQuery?.metrics,
     limit: compQuery?.limit,
     specialMode: compQuery?.specialMode,
+    trendRequested: compQuery?.trendRequested,
     parser: {
       usedLLM: false,
       intentExplicit: hasExplicitIntent(input, comparison, ownedItems, itemCategories),

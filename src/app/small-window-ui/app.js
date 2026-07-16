@@ -397,6 +397,28 @@ function compUpdatedLabel(value) {
   return value ? `${t("updated")} ${formatDate(value)}` : t("updateUnavailable");
 }
 
+function renderCompTrendNotice(data, improving) {
+  if (improving.length) return "";
+  const status = data.trend?.status;
+  let message = "";
+  if (status === "warming") {
+    message = data.trend?.readyAt
+      ? t("trendWarmingReady", { value: escapeHtml(formatDate(data.trend.readyAt)) })
+      : t("trendWarming");
+  } else if (status === "local" || status === "mixed") {
+    message = t("trendNoneLocal");
+  } else if (status === "upstream") {
+    message = t("trendNoneUpstream");
+  } else if (status === "unavailable") {
+    message = t("trendUnavailable");
+  }
+  return message ? `<div class="comp-trend-notice" data-trend-status="${escapeHtml(status)}">${message}</div>` : "";
+}
+
+function compTrendSourceLabel(comp) {
+  return comp.trend?.source === "local_72h" ? t("trendSourceLocal") : t("trendSourceOfficial");
+}
+
 function renderCompUnit(unit, expanded = false) {
   const items = expanded && unit.items?.length
     ? `<span class="unit-items">${unit.items.map((item) => assetThumb(item.iconUrl, localizedName(item), "tiny-item-icon")).join("")}</span>`
@@ -444,6 +466,7 @@ function renderCompCard(comp, metricKey, index) {
 function renderCompRankings(data) {
   const sections = Object.entries(data.rankings ?? {}).filter(([, comps]) => comps?.length);
   const references = data.references ?? [];
+  const improving = data.improving ?? [];
   const stale = data.cache?.query?.stale ? t("staleCache") : data.cache?.query?.hit ? t("localCache") : t("live");
   if (!sections.length && !references.length) {
     setResponseHtml(`
@@ -453,6 +476,7 @@ function renderCompRankings(data) {
         <small>${escapeHtml(compUpdatedLabel(data.source?.updatedAt))}</small>
       </div>
       ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
+      ${renderCompTrendNotice(data, improving)}
       <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
     return;
   }
@@ -463,6 +487,8 @@ function renderCompRankings(data) {
       <small title="${escapeHtml(compRankLabel(data.query?.rankFilter))}">${t("rank")} ${escapeHtml(compRankLabel(data.query?.rankFilter))} · ${escapeHtml(compUpdatedLabel(data.source?.updatedAt))}</small>
     </div>
     ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
+    ${renderCompTrendNotice(data, improving)}
+    ${improving.length ? `<section class="ranking-section improving-section"><h2>${t("improvingComps")}</h2>${improving.map((comp) => `<div class="improving-comp"><span class="improving-arrow" aria-hidden="true">↟</span><strong>${escapeHtml(localizedName(comp))}</strong><span>${t("avgPlacementImproved", { value: escapeHtml(Math.abs(comp.trend?.avgPlacementChange ?? 0).toFixed(2)) })}</span><small class="trend-source">${escapeHtml(compTrendSourceLabel(comp))}</small>${comp.lowSample ? `<small>${t("lowSample")}</small>` : ""}</div>`).join("")}</section>` : ""}
     ${sections.map(([key, comps]) => `<section class="ranking-section"><h2>${escapeHtml(compMetricLabel(key))}</h2>${comps.map((comp, index) => renderCompCard(comp, key, index)).join("")}</section>`).join("")}
     ${references.length ? `<section class="ranking-section low-sample-section"><h2>${t("lowSampleSection")}</h2>${references.map((comp, index) => renderCompCard(comp, "popularity", index)).join("")}</section>` : ""}
     ${generatedConclusionCard(data)}
