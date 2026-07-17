@@ -5,7 +5,9 @@ import {
   INTENT_ENVELOPE_SCHEMA_VERSION,
   RetrievalPlanner,
   createIntentEnvelope,
+  createRetrievalPlan,
   createCatalog,
+  recommendForInput,
   recommendFromRows,
   parseQuery,
   buildQueryContext,
@@ -27,6 +29,9 @@ test("IntentEnvelope exports the versioned unified parsing contract", () => {
   assert.equal(envelope.entities[0].type, "unit");
   assert.equal(envelope.needsClarification, false);
   assert.ok(envelope.requestedMetrics.includes("avgPlacement"));
+  assert.deepEqual(envelope.constraints.starLevel, [2]);
+  assert.equal(envelope.constraints.itemCount, 3);
+  assert.deepEqual(envelope.constraints.traitFilters, []);
 });
 
 test("RetrievalPlanner emits only registered structured operations and skips optional semantics for exact entities", () => {
@@ -37,6 +42,8 @@ test("RetrievalPlanner emits only registered structured operations and skips opt
   assert.equal(plan.structuredQueries[0].source, "metatft");
   assert.equal(plan.structuredQueries[0].operation, "unit_builds");
   assert.equal(plan.structuredQueries[0].params.unit, "TFT17_Xayah");
+  assert.deepEqual(plan.structuredQueries[0].params.starLevel, [2]);
+  assert.equal(plan.structuredQueries[0].params.itemCount, 3);
   assert.deepEqual(plan.semanticQueries, []);
   assert.equal(plan.promptKey, "unit-build-rankings");
 });
@@ -62,6 +69,7 @@ test("RetrievalPlanner maps every conclusion intent to a fixed prompt and operat
     ["unit_best_3_items", "unit_builds", "unit-build-rankings"],
     ["unit_item_rankings", "unit_builds", "unit-item-rankings"],
     ["unit_item_comparison", "unit_builds", "unit-item-comparison"],
+    ["unit_item_availability", "unit_builds", null],
     ["unit_emblem_rankings", "unit_builds", "unit-emblem-rankings"],
     ["comp_rankings", "comps_rankings", "comp-rankings"],
     ["comp_trends", "comps_trends", "comp-trends"]
@@ -77,6 +85,23 @@ test("RetrievalPlanner maps every conclusion intent to a fixed prompt and operat
     assert.equal(plan.structuredQueries[0].operation, operation, intent);
     assert.equal(plan.promptKey, promptKey, intent);
   }
+});
+
+test("RetrievalPlanner includes conditional Comp resolution before the final unit query", () => {
+  const planner = new RetrievalPlanner();
+  const base = envelopeFor("霞怎么出装？");
+  const plan = planner.plan({
+    ...base,
+    constraints: {
+      ...base.constraints,
+      compMention: "观星霞"
+    }
+  });
+  assert.deepEqual(
+    plan.structuredQueries.map((query) => [query.operation, query.required]),
+    [["unit_comp_candidates", false], ["unit_builds", true]]
+  );
+  assert.equal(plan.structuredQueries[0].params.mention, "观星霞");
 });
 
 test("detail intents stay structured-only and have no conclusion prompt", () => {
@@ -96,4 +121,70 @@ test("existing deterministic recommendation results expose an auditable envelope
   assert.equal(result.intentEnvelope.schemaVersion, "intent_envelope.v1");
   assert.equal(result.retrievalPlan.schemaVersion, "retrieval_plan.v1");
   assert.equal(result.retrievalPlan.structuredQueries[0].operation, "unit_builds");
+});
+
+test("production structured retrieval rejects a non-allowlisted plan before calling MetaTFT", async () => {
+  let remoteCalls = 0;
+  const retrievalPlanner = {
+    plan(envelope) {
+      return createRetrievalPlan({
+        intent: envelope.intent,
+        structuredQueries: [{
+          id: "structured:unit_builds",
+          source: "untrusted_source",
+          operation: "unit_builds",
+          params: { unit: "TFT17_Xayah" },
+          required: true
+        }],
+        promptKey: "unit-build-rankings"
+      });
+    }
+  };
+  await assert.rejects(() => recommendForInput("霞怎么出装？", {
+    catalog: createCatalog(),
+    useSession: false,
+    retrievalPlanner,
+    metaTFTClient: {
+      async getUnitBuilds() {
+        remoteCalls += 1;
+        return { data: [] };
+      }
+    }
+  }), /not allowlisted/u);
+  assert.equal(remoteCalls, 0);
+});
+
+test("production comp retrieval also rejects a non-allowlisted plan before network calls", async () => {
+  let remoteCalls = 0;
+  const retrievalPlanner = {
+    plan(envelope) {
+      return createRetrievalPlan({
+        intent: envelope.intent,
+        structuredQueries: [{
+          id: "structured:comps_rankings",
+          source: "untrusted_source",
+          operation: "comps_rankings",
+          params: {},
+          required: true
+        }],
+        promptKey: "comp-rankings"
+      });
+    }
+  };
+  await assert.rejects(() => recommendForInput("当前版本阵容排行", {
+    catalog: createCatalog(),
+    useSession: false,
+    retrievalPlanner,
+    compsClient: {
+      async getCompsData() {
+        remoteCalls += 1;
+        return {};
+      },
+      async getCompsStats() {
+        remoteCalls += 1;
+        return {};
+      }
+    }
+  }), /not allowlisted/u);
+  assert.equal(remoteCalls, 0);
 });

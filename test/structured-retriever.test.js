@@ -61,3 +61,35 @@ test("StructuredRetriever keeps detail queries catalog-only and does not require
   assert.equal(result.value.apiName, "TFT17_Xayah");
   assert.equal(plan.promptKey, null);
 });
+
+test("StructuredRetriever allowlists conditional unit Comp candidate lookup", async () => {
+  let received;
+  const retriever = new StructuredRetriever({
+    handlers: {
+      unit_comp_candidates: async (params) => {
+        received = params;
+        return { candidates: [] };
+      }
+    }
+  });
+  const plan = createRetrievalPlan({
+    intent: "unit_build_rankings",
+    structuredQueries: [{
+      source: "metatft",
+      operation: "unit_comp_candidates",
+      params: {
+        unit: "TFT17_Xayah",
+        mention: "观星霞",
+        days: 3,
+        inventedEndpoint: "https://evil.example"
+      },
+      required: false
+    }]
+  });
+  await retriever.execute(plan);
+  assert.deepEqual(received, {
+    unit: "TFT17_Xayah",
+    mention: "观星霞",
+    days: 3
+  });
+});

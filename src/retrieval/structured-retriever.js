@@ -4,9 +4,14 @@ const OPERATION_REGISTRY = Object.freeze({
   unit_builds: Object.freeze({
     source: "metatft",
     params: Object.freeze([
-      "unit", "days", "patch", "queue", "rank", "itemPolicy", "itemCategories",
+      "unit", "days", "patch", "queue", "rank", "starLevel", "itemCount", "traitFilters",
+      "comp", "itemPolicy", "itemCategories",
       "lockedItems", "excludedItems", "comparisonItems", "minSamples"
     ])
+  }),
+  unit_comp_candidates: Object.freeze({
+    source: "metatft",
+    params: Object.freeze(["unit", "mention", "days", "patch", "queue", "rank", "minSamples"])
   }),
   comps_rankings: Object.freeze({
     source: "metatft",
@@ -33,7 +38,7 @@ function safeParams(query, registration) {
 
 export class StructuredRetrievalError extends Error {
   constructor(message, options = {}) {
-    super(message);
+    super(message, options.cause ? { cause: options.cause } : undefined);
     this.name = "StructuredRetrievalError";
     this.code = options.code ?? "structured_retrieval_error";
     this.operation = options.operation ?? null;
@@ -94,10 +99,11 @@ export class StructuredRetriever {
     } catch (error) {
       this.onEvent?.({ type: "structured_retrieval_failed", operation: query.operation, durationMs: Date.now() - startedAt });
       if (error instanceof StructuredRetrievalError) throw error;
-      throw new StructuredRetrievalError(`Structured operation failed: ${query.operation}`, {
+      throw new StructuredRetrievalError(`Structured operation failed: ${query.operation}: ${error?.message ?? "unknown error"}`, {
         code: "operation_failed",
         operation: query.operation,
-        recoverable: true
+        recoverable: true,
+        cause: error
       });
     }
   }

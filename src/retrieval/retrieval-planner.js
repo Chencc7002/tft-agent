@@ -22,6 +22,7 @@ const REQUIRED_EVIDENCE = Object.freeze({
   unit_best_3_items: ["visible_builds", "games", "avgPlacement", "top4Rate", "winRate"],
   unit_item_rankings: ["visible_items", "coverage", "games", "avgPlacement", "top4Rate", "winRate"],
   unit_item_comparison: ["comparison_options", "exclusive_samples", "winner", "games", "avgPlacement", "top4Rate", "winRate"],
+  unit_item_availability: ["visible_builds"],
   unit_emblem_rankings: ["visible_emblems", "games", "avgPlacement", "top4Rate", "winRate"],
   comp_rankings: ["visible_comps", "games", "avgPlacement", "top4Rate", "winRate", "pickRate"],
   comp_trends: ["visible_trends", "placementImprovement", "pickRate", "games", "trendScore"]
@@ -54,6 +55,10 @@ function unitBuildQuery(envelope) {
       patch: constraints.patch,
       queue: constraints.queue,
       rank: constraints.rankFilter,
+      starLevel: constraints.starLevel,
+      itemCount: constraints.itemCount,
+      traitFilters: constraints.traitFilters,
+      comp: constraints.comp,
       itemPolicy: constraints.itemPolicy,
       itemCategories: constraints.itemCategories,
       lockedItems: constraints.lockedItems,
@@ -62,6 +67,25 @@ function unitBuildQuery(envelope) {
       minSamples: constraints.minSamples
     }),
     required: true
+  };
+}
+
+function unitCompCandidatesQuery(envelope) {
+  const constraints = envelope.constraints;
+  return {
+    id: "structured:unit_comp_candidates",
+    source: "metatft",
+    operation: "unit_comp_candidates",
+    params: compactParams({
+      unit: entity(envelope, "unit")?.apiName,
+      mention: constraints.compMention,
+      days: constraints.days,
+      patch: constraints.patch,
+      queue: constraints.queue,
+      rank: constraints.rankFilter,
+      minSamples: constraints.minSamples
+    }),
+    required: false
   };
 }
 
@@ -130,8 +154,11 @@ export class RetrievalPlanner {
     const structuredQueries = [];
     if ([
       "unit_build_rankings", "unit_build_completion", "unit_best_3_items", "unit_item_rankings",
-      "unit_item_comparison", "unit_emblem_rankings"
+      "unit_item_comparison", "unit_item_availability", "unit_emblem_rankings"
     ].includes(envelope.intent)) {
+      if (envelope.constraints.compMention) {
+        structuredQueries.push(unitCompCandidatesQuery(envelope));
+      }
       structuredQueries.push(unitBuildQuery(envelope));
     } else if (["comp_rankings", "comp_trends"].includes(envelope.intent)) {
       structuredQueries.push(compQuery(envelope));

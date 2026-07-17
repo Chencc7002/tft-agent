@@ -92,6 +92,28 @@ function metricsFor(intent, query) {
   return [];
 }
 
+function compConstraint(query, parsed) {
+  const comp = query?.comp;
+  const value = comp?.value;
+  const rawMention = parsed?.compMention ?? parsed?.comp?.value ?? query?.compMention ?? null;
+  const mention = typeof rawMention === "string"
+    ? rawMention
+    : rawMention?.name ?? rawMention?.id ?? null;
+  return {
+    mention: mention ? String(mention) : null,
+    resolved: comp ? {
+      status: comp.status ?? null,
+      source: comp.source ?? null,
+      confidence: finite(comp.confidence),
+      value: value ? {
+        id: value.id ?? null,
+        name: value.name ?? null,
+        selection: value.selection ?? null
+      } : null
+    } : null
+  };
+}
+
 export function createIntentEnvelope({ input = "", parsed = {}, query = {}, validation = {}, clarification = null, catalog = null } = {}) {
   const intent = query?.intent ?? parsed?.intent ?? null;
   const entities = buildEntities(parsed, query, catalog);
@@ -113,6 +135,7 @@ export function createIntentEnvelope({ input = "", parsed = {}, query = {}, vali
   const confidence = needsClarification
     ? Math.min(0.49, minimumEntityConfidence)
     : Math.max(0, Math.min(1, finite(parsed?.confidence, minimumEntityConfidence)));
+  const comp = compConstraint(query, parsed);
   return {
     schemaVersion: INTENT_ENVELOPE_SCHEMA_VERSION,
     input: String(input ?? parsed?.rawInput ?? "").slice(0, 500),
@@ -125,11 +148,16 @@ export function createIntentEnvelope({ input = "", parsed = {}, query = {}, vali
       rankFilter: unique(query?.rankFilter).map(String),
       patch: query?.patch ?? null,
       queue: query?.queue ?? null,
+      starLevel: unique(query?.starLevel).map(Number).filter(Number.isFinite),
+      itemCount: finite(query?.itemCount),
+      traitFilters: unique(query?.traitFilters).map(String),
       itemPolicy: query?.itemPolicy ?? null,
       itemCategories: unique(query?.itemCategories).map(String),
       lockedItems: unique(query?.lockedItems).map(String),
       excludedItems: unique(query?.excludedItems).map(String),
       comparisonItems: unique(query?.comparisonItems).map(String),
+      compMention: comp.mention,
+      comp: comp.resolved,
       metrics: unique(query?.metrics).map(String),
       limit: finite(query?.limit),
       trendRequested: Boolean(query?.trendRequested)

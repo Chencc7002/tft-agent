@@ -44,6 +44,7 @@ import { enrichCompResponseWithTrendHistory } from "./comp-trend-history.js";
 import { decorateCompAssets } from "../data/asset-resolver.js";
 import { createIntentEnvelope } from "../retrieval/contracts.js";
 import { RetrievalPlanner } from "../retrieval/retrieval-planner.js";
+import { StructuredRetriever } from "../retrieval/structured-retriever.js";
 
 export const SESSION_LAST_QUERY_KEY = "last_query";
 const RETRIEVAL_PLANNER = new RetrievalPlanner();
@@ -111,7 +112,7 @@ function isCompIntent(intent) {
   return intent === "comp_rankings" || intent === "comp_trends";
 }
 
-function attachRetrievalAudit(result, input, catalog) {
+function createRetrievalAudit(result, input, catalog, planner = RETRIEVAL_PLANNER) {
   const intentEnvelope = createIntentEnvelope({
     input,
     parsed: result?.parsed,
@@ -122,13 +123,29 @@ function attachRetrievalAudit(result, input, catalog) {
   });
   let retrievalPlan = null;
   try {
-    retrievalPlan = RETRIEVAL_PLANNER.plan(intentEnvelope);
+    retrievalPlan = planner.plan(intentEnvelope);
   } catch (error) {
     intentEnvelope.warnings = [...new Set([...intentEnvelope.warnings, `retrieval_plan_unavailable:${error.message}`])];
   }
-  result.intentEnvelope = intentEnvelope;
-  result.retrievalPlan = retrievalPlan;
+  return { intentEnvelope, retrievalPlan };
+}
+
+function attachRetrievalAudit(result, input, catalog, audit = null) {
+  const value = audit ?? createRetrievalAudit(result, input, catalog);
+  result.intentEnvelope = value.intentEnvelope;
+  result.retrievalPlan = value.retrievalPlan;
   return result;
+}
+
+function structuredQueryFor(plan, operation) {
+  return plan?.structuredQueries?.find((query) => query.operation === operation) ?? null;
+}
+
+async function executePlannedStructuredQuery(plan, operation, handler, context = {}) {
+  const query = structuredQueryFor(plan, operation);
+  if (!query) throw new Error(`RetrievalPlan does not allow structured operation: ${operation}`);
+  const retriever = new StructuredRetriever({ handlers: { [operation]: handler } });
+  return (await retriever.executeQuery(query, context)).value;
 }
 
 function itemLabel(apiName, catalog) {
@@ -1060,9 +1077,26 @@ async function resolveCompConstraint(query, parsed, options, catalog) {
 
   if (response === undefined && options.metaTFTClient) {
     try {
-      response = typeof options.metaTFTClient.getCompCandidates === "function"
-        ? await options.metaTFTClient.getCompCandidates(plan)
-        : await options.metaTFTClient.getExactUnitsTraits2(plan.params);
+      response = await executePlannedStructuredQuery(
+        options.retrievalPlan,
+        "unit_comp_candidates",
+        async (params) => {
+          const plannedQuery = {
+            ...query,
+            unit: params.unit,
+            days: params.days,
+            patch: params.patch,
+            queue: params.queue,
+            rankFilter: params.rank,
+            minSamples: params.minSamples
+          };
+          const explorerPlan = planMetaTFTCompCandidates(plannedQuery);
+          return typeof options.metaTFTClient.getCompCandidates === "function"
+            ? options.metaTFTClient.getCompCandidates(explorerPlan)
+            : options.metaTFTClient.getExactUnitsTraits2(explorerPlan.params);
+        },
+        { intent: query.intent }
+      );
       const stored = await setStoreEntry(cacheStore, "setDefaultContext", cacheKey, {
         request: plan,
         response,
@@ -1342,6 +1376,15 @@ export async function recommendForInput(input, options = {}) {
       ["rankFilter", "days", "patch", "queue", "minSamples", "sort", "metrics", "limit"]
         .map((key) => [key, compConstraintSource(parsedInput, options, key)])
     );
+    const retrievalAudit = createRetrievalAudit({
+      parsed: parsedInput,
+      query,
+      validation: { valid: true, errors: [], warnings: [] },
+      clarification: null
+    }, input, catalog, options.retrievalPlanner ?? RETRIEVAL_PLANNER);
+    if (!retrievalAudit.retrievalPlan || retrievalAudit.retrievalPlan.needsClarification) {
+      throw new Error("A valid RetrievalPlan is required before structured retrieval");
+    }
     const queryCacheKey = makeQueryCacheKey(query);
     let response = options.compResponse ?? options.response;
     let queryCache = { key: queryCacheKey, hit: false };
@@ -1361,43 +1404,58 @@ export async function recommendForInput(input, options = {}) {
     }
 
     if (response === undefined) {
-      const dataParams = { queue: query.queue };
-      const statsParams = {
-        queue: query.queue,
-        patch: query.patch,
-        days: query.days,
-        permit_filter_adjustment: "true"
-      };
-      if (query.queue === "1100" && query.rankFilter.length > 0) {
-        statsParams.rank = [...query.rankFilter].sort().join(",");
-      }
       try {
-        const client = options.compsClient;
-        if (typeof client?.getCompsData !== "function" || typeof client?.getCompsStats !== "function") {
-          throw new Error("comp rankings require a comps client with getCompsData() and getCompsStats()");
-        }
-        let compsData = await client.getCompsData(dataParams);
-        let dataClusterId = compsData?.results?.data?.cluster_id ?? compsData?.cluster_id;
-        let compsStats = await client.getCompsStats({
-          ...statsParams,
-          ...(dataClusterId !== undefined && dataClusterId !== null ? { cluster_id: dataClusterId } : {})
-        });
-        const statsClusterId = compsStats?.cluster_id ?? compsStats?.data?.cluster_id;
-        if (dataClusterId !== undefined && statsClusterId !== undefined
-          && String(dataClusterId) !== String(statsClusterId)) {
-          compsData = await client.getCompsData(dataParams);
-          dataClusterId = compsData?.results?.data?.cluster_id ?? compsData?.cluster_id;
-          compsStats = await client.getCompsStats({
-            ...statsParams,
-            ...(dataClusterId !== undefined && dataClusterId !== null ? { cluster_id: dataClusterId } : {})
-          });
-        }
-        const finalStatsClusterId = compsStats?.cluster_id ?? compsStats?.data?.cluster_id;
-        if (dataClusterId !== undefined && finalStatsClusterId !== undefined
-          && String(dataClusterId) !== String(finalStatsClusterId)) {
-          throw new Error(`MetaTFT comps cluster mismatch after retry: data=${dataClusterId}, stats=${finalStatsClusterId}`);
-        }
-        response = createCompsPageSnapshot(compsData, compsStats);
+        const operation = query.intent === "comp_trends" ? "comps_trends" : "comps_rankings";
+        const retrieved = await executePlannedStructuredQuery(
+          retrievalAudit.retrievalPlan,
+          operation,
+          async (params) => {
+            const dataParams = { queue: params.queue };
+            const statsParams = {
+              queue: params.queue,
+              patch: params.patch,
+              days: params.days,
+              permit_filter_adjustment: "true"
+            };
+            if (params.queue === "1100" && params.rank?.length > 0) {
+              statsParams.rank = [...params.rank].sort().join(",");
+            }
+            const client = options.compsClient;
+            if (typeof client?.getCompsData !== "function" || typeof client?.getCompsStats !== "function") {
+              throw new Error("comp rankings require a comps client with getCompsData() and getCompsStats()");
+            }
+            let compsData = await client.getCompsData(dataParams);
+            let dataClusterId = compsData?.results?.data?.cluster_id ?? compsData?.cluster_id;
+            let compsStats = await client.getCompsStats({
+              ...statsParams,
+              ...(dataClusterId !== undefined && dataClusterId !== null ? { cluster_id: dataClusterId } : {})
+            });
+            const statsClusterId = compsStats?.cluster_id ?? compsStats?.data?.cluster_id;
+            if (dataClusterId !== undefined && statsClusterId !== undefined
+              && String(dataClusterId) !== String(statsClusterId)) {
+              compsData = await client.getCompsData(dataParams);
+              dataClusterId = compsData?.results?.data?.cluster_id ?? compsData?.cluster_id;
+              compsStats = await client.getCompsStats({
+                ...statsParams,
+                ...(dataClusterId !== undefined && dataClusterId !== null ? { cluster_id: dataClusterId } : {})
+              });
+            }
+            const finalStatsClusterId = compsStats?.cluster_id ?? compsStats?.data?.cluster_id;
+            if (dataClusterId !== undefined && finalStatsClusterId !== undefined
+              && String(dataClusterId) !== String(finalStatsClusterId)) {
+              throw new Error(`MetaTFT comps cluster mismatch after retry: data=${dataClusterId}, stats=${finalStatsClusterId}`);
+            }
+            return {
+              response: createCompsPageSnapshot(compsData, compsStats),
+              dataParams,
+              statsParams,
+              dataClusterId
+            };
+          },
+          { intent: query.intent }
+        );
+        const { dataParams, statsParams, dataClusterId } = retrieved;
+        response = retrieved.response;
         try {
           response = await enrichCompResponseWithTrendHistory(response, {
             query,
@@ -1484,7 +1542,7 @@ export async function recommendForInput(input, options = {}) {
       }
     };
     decorated.text = "";
-    attachRetrievalAudit(decorated, input, catalog);
+    attachRetrievalAudit(decorated, input, catalog, retrievalAudit);
     return decorated;
   }
 
@@ -1584,9 +1642,18 @@ export async function recommendForInput(input, options = {}) {
     return result;
   }
 
+  const preflightRetrievalAudit = createRetrievalAudit({
+    parsed,
+    query: preflightValidatedQuery,
+    validation: preflightValidation,
+    clarification: preflightClarification
+  }, input, catalog, options.retrievalPlanner ?? RETRIEVAL_PLANNER);
   const compResult = parsedUnavailableItems.length > 0 || hasUnresolvedEntityHints
     ? { value: null, cache: null, warnings: [] }
-    : await resolveCompConstraint(preflightValidatedQuery, parsed, options, catalog);
+    : await resolveCompConstraint(preflightValidatedQuery, parsed, {
+      ...options,
+      retrievalPlan: preflightRetrievalAudit.retrievalPlan
+    }, catalog);
   const query = buildQueryContext(parsed, {
     catalog,
     preferences: options.preferences,
@@ -1651,6 +1718,15 @@ export async function recommendForInput(input, options = {}) {
     return result;
   }
 
+  const finalRetrievalAudit = createRetrievalAudit({
+    parsed,
+    query: validatedQuery,
+    validation,
+    clarification
+  }, input, catalog, options.retrievalPlanner ?? RETRIEVAL_PLANNER);
+  if (!finalRetrievalAudit.retrievalPlan || finalRetrievalAudit.retrievalPlan.needsClarification) {
+    throw new Error("A valid RetrievalPlan is required before structured retrieval");
+  }
   const queryCacheKey = makeQueryCacheKey(validatedQuery);
   let queryCache = {
     key: queryCacheKey,
@@ -1674,7 +1750,33 @@ export async function recommendForInput(input, options = {}) {
 
   if (response === undefined) {
     try {
-      response = await options.metaTFTClient?.getUnitBuilds(plan);
+      response = await executePlannedStructuredQuery(
+        finalRetrievalAudit.retrievalPlan,
+        "unit_builds",
+        async (params) => {
+          const plannedQuery = {
+            ...validatedQuery,
+            unit: params.unit,
+            days: params.days,
+            patch: params.patch,
+            queue: params.queue,
+            rankFilter: params.rank,
+            starLevel: params.starLevel,
+            itemCount: params.itemCount,
+            traitFilters: params.traitFilters,
+            comp: params.comp,
+            itemPolicy: params.itemPolicy,
+            itemCategories: params.itemCategories,
+            lockedItems: params.lockedItems,
+            ownedItems: params.lockedItems,
+            excludedItems: params.excludedItems,
+            comparisonItems: params.comparisonItems,
+            minSamples: params.minSamples
+          };
+          return options.metaTFTClient?.getUnitBuilds(planMetaTFTUnitBuilds(plannedQuery));
+        },
+        { intent: validatedQuery.intent }
+      );
       if (response !== undefined) {
         const stored = await setStoreEntry(cacheStore, "setQuery", queryCacheKey, {
           request: plan,
@@ -1754,5 +1856,5 @@ export async function recommendForInput(input, options = {}) {
     result.cache.session.writtenAt = sessionWrite.updatedAt;
   }
 
-  return result;
+  return attachRetrievalAudit(result, input, catalog, finalRetrievalAudit);
 }
