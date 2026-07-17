@@ -1903,6 +1903,28 @@ test("structured parser can safely expand unresolved entity mentions before reco
   assert.ok(result.rankedBuilds.every((build) => build.items.includes("TFT_Item_GuinsoosRageblade")));
 });
 
+test("provider-authored clarification prose cannot surface stale catalog entities", async () => {
+  const result = await recommendForInput("哪个更好？", {
+    response: fixtureRows,
+    structuredParser: async () => ({
+      intent: "clarification",
+      entities: {
+        unit_mentions: [],
+        item_mentions: [],
+        trait_mentions: []
+      },
+      constraints: {},
+      needs_clarification: true,
+      clarification_question: "你想比较什么？例如“霞和婕拉哪个好”。"
+    })
+  });
+
+  assert.equal(result.clarification.reason, "structured_parser_clarification");
+  assert.match(result.text, /当前版本的英雄、装备或羁绊名称/u);
+  assert.doesNotMatch(result.text, /婕拉/u);
+  assert.equal(result.parsed.parser.structuredParser.clarificationQuestion, null);
+});
+
 test("structured parser can resolve an explicit low-confidence item after the unit is known", async () => {
   let calls = 0;
   const result = await recommendForInput("霞有guinso，剩下两件怎么带？", {
