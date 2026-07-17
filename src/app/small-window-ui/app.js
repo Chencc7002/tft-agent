@@ -346,11 +346,11 @@ function itemPill(item) {
   </span>`;
 }
 
-function assetThumb(iconUrl, label, className = "") {
+function assetThumb(iconUrl, label, className = "", fallbackIconUrl = null) {
   const text = String(label ?? "?").trim();
   const fallback = text.slice(0, 1) || "?";
   const image = iconUrl
-    ? `<img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.hidden=true">`
+    ? `<img src="${escapeHtml(iconUrl)}" alt="" loading="lazy"${fallbackIconUrl ? ` data-fallback-src="${escapeHtml(fallbackIconUrl)}"` : ""} onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}">`
     : "";
   return `<span class="asset-thumb ${escapeHtml(className)}" role="img" aria-label="${escapeHtml(text)}" title="${escapeHtml(text)}"><span>${escapeHtml(fallback)}</span>${image}</span>`;
 }
@@ -371,6 +371,7 @@ function compMetricLabel(key) {
   return {
     top4Rate: t("top4Highest"),
     winRate: t("winHighest"),
+    winShare: t("winShareHighest"),
     avgPlacement: t("avgBest"),
     popularity: t("mostPopular")
   }[key] ?? key;
@@ -378,6 +379,8 @@ function compMetricLabel(key) {
 
 function compPrimaryMetric(key, comp) {
   if (key === "winRate") return `${t("winShort")} ${rate(comp.stats?.winRate)}`;
+  if (key === "winShare") return `${t("winShareShort")} ${rate(comp.stats?.winShare)}`;
+  if (key === "trend") return `↟ ${t("avgPlacementImproved", { value: Math.abs(comp.trend?.avgPlacementChange ?? 0).toFixed(2) })}`;
   if (key === "avgPlacement") return `${t("avgShort")} ${placement(comp.stats?.avgPlacement)}`;
   if (key === "popularity") return `${t("samples")} ${formatNumber(comp.stats?.games ?? 0)}`;
   return `${t("top4Short")} ${rate(comp.stats?.top4Rate)}`;
@@ -400,8 +403,16 @@ function compUpdatedLabel(value) {
 function renderCompTrendNotice(data, improving) {
   if (improving.length) return "";
   const status = data.trend?.status;
+  const gate = data.trend?.officialGate;
   let message = "";
-  if (status === "warming") {
+  if (gate && !gate.ready && status !== "local" && status !== "mixed") {
+    message = gate.status === "insufficient"
+      ? t("trendGateInsufficient", {
+        eligible: gate.eligibleCount ?? 0,
+        minimum: gate.minimum ?? 3
+      })
+      : t("trendGateFieldMissing");
+  } else if (status === "warming") {
     message = data.trend?.readyAt
       ? t("trendWarmingReady", { value: escapeHtml(formatDate(data.trend.readyAt)) })
       : t("trendWarming");
@@ -416,7 +427,9 @@ function renderCompTrendNotice(data, improving) {
 }
 
 function compTrendSourceLabel(comp) {
-  return comp.trend?.source === "local_72h" ? t("trendSourceLocal") : t("trendSourceOfficial");
+  if (comp.trend?.source === "local_72h") return t("trendSourceLocal");
+  if (comp.trend?.source === "metatft_page_calculated") return t("trendSourcePageCalculated");
+  return t("trendSourceOfficial");
 }
 
 function renderCompUnit(unit, expanded = false) {
@@ -426,8 +439,13 @@ function renderCompUnit(unit, expanded = false) {
   const averageStar = expanded && hasNumericValue(unit.avgStarLevel)
     ? `<small class="unit-star">${t("avgShort")} ${formatNumber(unit.avgStarLevel, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}★</small>`
     : "";
-  return `<div class="comp-unit${unit.core ? " core" : ""}">
-    ${assetThumb(unit.iconUrl, localizedName(unit), "unit-icon")}
+  const targetStarLevel = Number(unit.targetStarLevel);
+  const targetStars = Number.isInteger(targetStarLevel) && targetStarLevel >= 3
+    ? `<span class="target-star-badge" title="${escapeHtml(t("targetStarLevel", { value: targetStarLevel }))}" aria-label="${escapeHtml(t("targetStarLevel", { value: targetStarLevel }))}">${"★".repeat(Math.min(4, targetStarLevel))}</span>`
+    : "";
+  return `<div class="comp-unit${unit.core ? " core" : ""}${targetStars ? " has-star-target" : ""}">
+    ${targetStars}
+    ${assetThumb(unit.iconUrl, localizedName(unit), "unit-icon", unit.fallbackIconUrl)}
     ${expanded ? `<span class="unit-name">${escapeHtml(localizedName(unit))}</span>${averageStar}${items}` : ""}
   </div>`;
 }
@@ -436,8 +454,12 @@ function renderCompCard(comp, metricKey, index) {
   const mainTraits = (comp.traits ?? []).filter((trait) => !/UniqueTrait|SummonTrait/.test(trait.filterId ?? trait.apiName)).slice(0, 3);
   const coreUnits = (comp.units ?? []).filter((unit) => unit.core).slice(0, 4);
   const foldedUnits = coreUnits.length ? coreUnits : (comp.units ?? []).slice(0, 5);
+  const appearanceRate = hasNumericValue(comp.stats?.pickRate) ? Number(comp.stats.pickRate) * 8 : null;
+  const metricSubline = metricKey === "trend"
+    ? `${t("appearanceShort")} ${rate(appearanceRate)} · ${formatNumber(comp.stats?.games ?? 0)} ${t("games")}`
+    : `${formatNumber(comp.stats?.games ?? 0)} ${t("games")}`;
   return `
-    <details class="comp-card" ${index === 0 ? "open" : ""}>
+    <details class="comp-card" data-variant="${metricKey === "trend" ? "trend" : "ranking"}" ${index === 0 ? "open" : ""}>
       <summary>
         <div class="comp-summary-main">
           <strong>${escapeHtml(localizedName(comp))}</strong>
@@ -447,15 +469,18 @@ function renderCompCard(comp, metricKey, index) {
         </div>
         <div class="comp-summary-metric">
           <b>${escapeHtml(compPrimaryMetric(metricKey, comp))}</b>
-          <span>${formatNumber(comp.stats?.games ?? 0)} ${t("games")}</span>
+          <span>${escapeHtml(metricSubline)}</span>
         </div>
       </summary>
       <div class="comp-expanded">
         <div class="comp-stat-line">
           <span>${t("top4Short")} ${rate(comp.stats?.top4Rate)}</span>
           <span>${t("winShort")} ${rate(comp.stats?.winRate)}</span>
+          <span>${t("winShareShort")} ${rate(comp.stats?.winShare)}</span>
           <span>${t("avgShort")} ${placement(comp.stats?.avgPlacement)}</span>
+          <span>${t("appearanceShort")} ${rate(appearanceRate)}</span>
         </div>
+        ${metricKey === "trend" ? `<div class="trend-model-line"><span>${escapeHtml(compTrendSourceLabel(comp))}</span><span>${t("emergingScore")} ${formatNumber(comp.trend?.emergenceScore ?? 0, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</span><small>${t("emergingFormula")}</small></div>` : ""}
         <div class="full-unit-grid">${(comp.units ?? []).map((unit) => renderCompUnit(unit, true)).join("")}</div>
         <div class="full-trait-row">${(comp.traits ?? []).map((trait) => `<span>${assetThumb(trait.iconUrl, compTraitLabel(trait), "trait-icon")}<small>${escapeHtml(compTraitLabel(trait))}</small></span>`).join("")}</div>
         <div class="comp-source">${t("sourceLabel")}：MetaTFT /comps_stats${comp.source?.clusterId ? ` / cluster ${escapeHtml(comp.source.clusterId)}` : ""} / ${escapeHtml(compUpdatedLabel(comp.source?.updatedAt))}</div>
@@ -488,10 +513,9 @@ function renderCompRankings(data) {
     </div>
     ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
     ${renderCompTrendNotice(data, improving)}
-    ${improving.length ? `<section class="ranking-section improving-section"><h2>${t("improvingComps")}</h2>${improving.map((comp) => `<div class="improving-comp"><span class="improving-arrow" aria-hidden="true">↟</span><strong>${escapeHtml(localizedName(comp))}</strong><span>${t("avgPlacementImproved", { value: escapeHtml(Math.abs(comp.trend?.avgPlacementChange ?? 0).toFixed(2)) })}</span><small class="trend-source">${escapeHtml(compTrendSourceLabel(comp))}</small>${comp.lowSample ? `<small>${t("lowSample")}</small>` : ""}</div>`).join("")}</section>` : ""}
+    ${improving.length ? `<section class="ranking-section improving-section"><h2>${t("improvingComps")}</h2><p class="trend-method">${t("emergingFormula")}</p>${improving.map((comp, index) => renderCompCard(comp, "trend", index)).join("")}</section>` : ""}
     ${sections.map(([key, comps]) => `<section class="ranking-section"><h2>${escapeHtml(compMetricLabel(key))}</h2>${comps.map((comp, index) => renderCompCard(comp, key, index)).join("")}</section>`).join("")}
     ${references.length ? `<section class="ranking-section low-sample-section"><h2>${t("lowSampleSection")}</h2>${references.map((comp, index) => renderCompCard(comp, "popularity", index)).join("")}</section>` : ""}
-    ${generatedConclusionCard(data)}
     <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
 }
 
@@ -645,6 +669,84 @@ function renderItemDetails(data) {
       <div class="card-head"><div class="card-title">${escapeHtml(item.name ?? t("itemDetails"))}</div><div class="detail-category">${escapeHtml(item.category ?? "")}</div></div>
       <strong class="detail-label">${escapeHtml(t("recipeRoute"))}</strong>${recipeHtml}
       <strong class="detail-label">${escapeHtml(t("effectAndStats"))}</strong><div class="detail-effect">${effect}</div>
+    </article>
+  `);
+}
+
+function entitySourceLine(source) {
+  if (!source) return "";
+  const parts = [source.season, source.version, source.updatedAt].filter(Boolean);
+  return parts.length ? `<div class="entity-source">${escapeHtml(parts.join(" · "))}</div>` : "";
+}
+
+function entityStat(label, value, suffix = "") {
+  const present = value !== null && value !== undefined && value !== "";
+  const display = present ? `${value}${suffix}` : "-";
+  return `<div class="entity-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(display)}</strong></div>`;
+}
+
+function renderUnitDetails(data) {
+  const unit = data.unit ?? {};
+  const stats = unit.stats ?? {};
+  const ability = unit.ability ?? {};
+  const recommendations = data.recommendedItems ?? [];
+  const manaValue = hasNumericValue(stats.startingMana) && hasNumericValue(stats.mana)
+    ? `${stats.startingMana}/${stats.mana}`
+    : stats.mana;
+  const recommendationHtml = recommendations.length
+    ? `<div class="stable-item-grid">${recommendations.map((item, index) => `
+        <article class="stable-item-card">
+          <div class="stable-item-head"><b>#${index + 1}</b>${itemPill(item)}</div>
+          <div class="stable-item-stats">
+            <span>${escapeHtml(t("metricSamples"))} <b>${formatNumber(item.stats?.games ?? 0)}</b></span>
+            <span>${escapeHtml(t("metricTop4Rate"))} <b>${formatNumber(item.stats?.top4 ?? 0)}%</b></span>
+            <span>${escapeHtml(t("metricAvgPlacement"))} <b>${formatNumber(item.stats?.avg ?? 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
+            <span>${escapeHtml(t("recommendationScore"))} <b>${formatNumber(item.recommendationScore ?? 0, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</b></span>
+          </div>
+        </article>`).join("")}</div>`
+    : `<div class="detail-muted">${escapeHtml(t("noStableItems"))}</div>`;
+  const abilityDescription = escapeHtml(ability.description ?? "-").replace(/\n/g, "<br>");
+
+  setResponseHtml(`
+    <article class="result-card entity-detail-card">
+      <header class="entity-detail-head">
+        ${assetThumb(unit.iconUrl, unit.name, "entity-icon")}
+        <div><div class="card-title">${escapeHtml(unit.name ?? t("unitDetails"))}</div><small>${unit.cost ? escapeHtml(t("unitCost", { value: unit.cost })) : ""}${unit.role ? ` · ${escapeHtml(unit.role)}` : ""}</small></div>
+      </header>
+      ${(unit.traitNames ?? []).length ? `<div class="entity-chips">${unit.traitNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("")}</div>` : ""}
+      <strong class="detail-label">${escapeHtml(t("baseStats"))}</strong>
+      <div class="entity-stat-grid">
+        ${entityStat(t("health"), stats.health)}${entityStat(t("mana"), manaValue)}${entityStat(t("attackDamage"), stats.attackDamage)}${entityStat(t("armor"), stats.armor)}
+        ${entityStat(t("magicResist"), stats.magicResist)}${entityStat(t("attackSpeed"), stats.attackSpeed)}${entityStat(t("attackRange"), stats.attackRange)}${entityStat(t("critChance"), stats.critChance, "%")}
+      </div>
+      <strong class="detail-label">${escapeHtml(t("ability"))}</strong>
+      <section class="ability-card">
+        ${assetThumb(ability.iconUrl, ability.name ?? t("ability"), "ability-icon")}
+        <div><div><strong>${escapeHtml(ability.name ?? t("ability"))}</strong>${ability.type ? `<span>${escapeHtml(ability.type)}</span>` : ""}</div><p>${abilityDescription}</p></div>
+      </section>
+      <strong class="detail-label">${escapeHtml(t("stableItemRecommendations"))}</strong>
+      ${recommendationHtml}
+      <div class="recommendation-method">${escapeHtml(t("recommendationMethod"))}</div>
+      ${entitySourceLine(unit.source ?? data.source)}
+    </article>
+  `);
+}
+
+function renderTraitDetails(data) {
+  const trait = data.trait ?? {};
+  const levels = trait.levels ?? [];
+  setResponseHtml(`
+    <article class="result-card entity-detail-card">
+      <header class="entity-detail-head">
+        ${assetThumb(trait.iconUrl, trait.name, "entity-icon")}
+        <div><div class="card-title">${escapeHtml(trait.name ?? t("traitDetails"))}</div><small>${escapeHtml(trait.type === "race" ? t("traitRace") : trait.type === "job" ? t("traitJob") : "")}</small></div>
+      </header>
+      <div class="detail-effect">${escapeHtml(trait.description ?? "-").replace(/\n/g, "<br>")}</div>
+      <strong class="detail-label">${escapeHtml(t("traitTiers"))}</strong>
+      <div class="trait-level-list">
+        ${levels.map((level) => `<div class="trait-level"><strong>${escapeHtml(t("unitsRequired", { value: level.units }))}</strong><span>${escapeHtml(level.effect)}</span></div>`).join("") || `<div class="detail-muted">-</div>`}
+      </div>
+      ${entitySourceLine(trait.source ?? data.source)}
     </article>
   `);
 }
@@ -1023,7 +1125,9 @@ function renderRecommendationResult(data) {
 }
 
 function renderCurrentResult(data) {
-  if (data.type === "item_details") renderItemDetails(data);
+  if (data.type === "unit_details") renderUnitDetails(data);
+  else if (data.type === "trait_details") renderTraitDetails(data);
+  else if (data.type === "item_details") renderItemDetails(data);
   else if (data.type === "unit_item_comparison") renderItemComparison(data);
   else if (data.type === CompRankingResult.type) renderCompRankings(data);
   else if (data.type === ItemRankingResult.type) renderItemRankings(data);

@@ -71,6 +71,38 @@ test("small-window keeps HTTP 200 and template facts when the provider fails", a
   assert.equal(payload.cards[0].stats.games, original.rankedBuilds[0].stats.games);
 });
 
+test("comp ranking requests skip the LLM conclusion provider", async () => {
+  let providerCalls = 0;
+  const runtime = createSmallWindowRuntime({
+    catalog: createCatalog(),
+    cacheStore: new MemoryCacheStore(),
+    metaTFTClient: {},
+    compsClient: {},
+    fetchItems: false,
+    conclusionProvider: async () => {
+      providerCalls += 1;
+      return providerOutput();
+    },
+    conclusionGeneratorConfig: { enabled: true, mode: "on" },
+    recommendForInputImpl: async () => ({
+      type: "comp_rankings",
+      rankings: {},
+      improving: [],
+      references: [],
+      query: {},
+      source: {},
+      diagnostics: {}
+    })
+  });
+  const { statusCode, payload } = await handleRecommendRequest({ input: "当前版本阵容" }, runtime);
+  assert.equal(statusCode, 200);
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(payload.answer.generatedConclusion, {
+    status: "skipped",
+    reason: "comp_rankings_disabled"
+  });
+});
+
 test("conclusion configuration and runtime status never expose endpoint or API key values", () => {
   const config = resolveSmallWindowConclusionConfig({}, {
     TFT_AGENT_CONCLUSION_MODE: "on",

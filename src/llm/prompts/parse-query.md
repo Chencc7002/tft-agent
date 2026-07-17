@@ -46,13 +46,14 @@ Rules:
 - `comparison_items` are two to five explicitly related alternatives (for example, "烁刃还是巨九"). Do not also put them in `locked_items`.
 - Only use `comparison_mode="exclusive_presence"`. Leave it empty when this is not a comparison.
 - Map "哪个好/更强/更稳/上分" to `top4Rate`, "上限/吃鸡" to `winRate`, "平均表现" to `avgPlacement`, and "更常用" to `games`.
+- Treat category recommendation wording such as “有什么强的转职”, “应该携带什么转职”, “哪个转职好”, “哪些纹章适合”, and “转职推荐” as the same request: use `intent="unit_item_rankings"`, `item_policy="include_special"`, and preserve the emblem/转职 category. Do not interpret these as a three-item build request or ask the user to name one emblem first.
 - Put items the player explicitly rejects (for example, "不要羊刀") in `excluded_items`, never in `locked_items` or `comparison_items`.
 - Use `needs_clarification=true` only when the query cannot be safely executed without user choice.
 - Treat fields already present in `already_parsed` as available context; they may come from the current input or a validated conversation follow-up. Do not ask for a unit, item, trait, or constraint that is already present there.
 - Use `min_samples=0` when the user explicitly removes or disables the sample threshold. Do not replace an explicit zero with a default value.
 - Leave unknown or unsupported fields empty instead of guessing.
 - Valid `intent` values are `unit_build_rankings`, `unit_item_rankings`, `unit_build_completion`, `unit_item_comparison`, `unit_item_availability`, `clarification`, and `comp_rankings`. `unit_best_3_items` remains a legacy-compatible alias for `unit_build_rankings`.
-- For `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-10. Parse only; never generate, rank, or score comps.
+- For `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `win_share`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-10. `win_share` means the share of all lobby wins, while `win_rate` means wins divided by games for that comp. Parse only; never generate, rank, or score comps.
 - For non-comp intents, leave `metrics` empty and `limit` null.
 - Valid `item_policy` values are `ordinary_only`, `include_radiant`, `include_artifact`, and `include_special`.
 - Valid `sort` values are `top4_first`, `win_first`, `robust_first`, `avg_first`, and `games_first`.

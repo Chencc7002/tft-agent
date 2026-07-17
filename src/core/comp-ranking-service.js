@@ -2,6 +2,7 @@ import {
   normalizeCompsPageDataResponse,
   normalizeCompsStatsResponse
 } from "../data/comp-response-adapter.js";
+import { inspectOfficialCompTrendGate } from "./official-comp-trend-gate.js";
 
 const SPECIAL_NAME_PATTERN = /(?:^|_)Augment_|UniqueCarry|HeroAugment/i;
 export const METATFT_DEFAULT_MIN_PLAYRATE = 0.01;
@@ -67,11 +68,21 @@ function metricComparator(metric) {
   }
   const field = metric === "win_rate"
     ? "winRate"
-    : metric === "popularity"
-      ? "pickRate"
-      : "top4Rate";
+    : metric === "win_share"
+      ? "winShare"
+      : metric === "popularity"
+        ? "pickRate"
+        : "top4Rate";
   return (left, right) => right.stats[field] - left.stats[field]
     || left.pageOrder - right.pageOrder;
+}
+
+function emergingStrength(stats, avgPlacementChange) {
+  if (!Number.isFinite(avgPlacementChange) || avgPlacementChange >= 0) return null;
+  const appearanceRate = Number.isFinite(stats?.pickRate)
+    ? Math.max(0, stats.pickRate * 8)
+    : 0;
+  return Math.abs(avgPlacementChange) * Math.sqrt(appearanceRate);
 }
 
 function responseParts(response, options) {
@@ -94,6 +105,9 @@ export function buildCompRankings(response = {}, options = {}) {
   const parts = responseParts(response, options);
   const pageData = normalizeCompsPageDataResponse(parts.compsData);
   const pageStats = normalizeCompsStatsResponse(parts.compsStats);
+  const officialGate = response?.officialTrendGate
+    ?? response?.trend?.officialGate
+    ?? inspectOfficialCompTrendGate(parts.compsData);
   const definitions = new Map(pageData.definitions.map((definition) => [definition.clusterId, definition]));
   const minPlayrate = Number.isFinite(Number(options.minPlayrate))
     ? Number(options.minPlayrate)
@@ -119,6 +133,12 @@ export function buildCompRankings(response = {}, options = {}) {
       continue;
     }
 
+    const localTrend = definition.trendSource === "local_72h";
+    const exactOfficialTrend = officialGate.ready
+      && definition.trendSource !== "local_72h";
+    const trendAllowed = localTrend || exactOfficialTrend;
+    const visiblePlacementChange = trendAllowed ? definition.avgPlacementChange : null;
+
     comps.push({
       compId: `cluster:${row.clusterId}`,
       name: compName(definition, catalog),
@@ -126,6 +146,11 @@ export function buildCompRankings(response = {}, options = {}) {
       units: definition.units.map((apiName) => ({
         apiName,
         name: readableToken(apiName, catalog, "unit"),
+        targetStarLevel: definition.fourStarUnits.includes(apiName)
+          ? 4
+          : definition.threeStarUnits.includes(apiName)
+            ? 3
+            : null,
         starLevel: null,
         avgStarLevel: null,
         core: false,
@@ -140,11 +165,12 @@ export function buildCompRankings(response = {}, options = {}) {
       coreBuilds: summarizeBuilds(definition),
       stats: row.stats,
       trend: {
-        avgPlacementChange: definition.avgPlacementChange,
-        source: definition.trendSource,
-        comparedAt: definition.trendComparedAt,
+        avgPlacementChange: visiblePlacementChange,
+        emergenceScore: emergingStrength(row.stats, visiblePlacementChange),
+        source: trendAllowed ? definition.trendSource : null,
+        comparedAt: trendAllowed ? definition.trendComparedAt : null,
         // MetaTFT shows the blue arrow only below -0.10 over the last 3 days.
-        improving: Number.isFinite(definition.avgPlacementChange) && definition.avgPlacementChange < -0.1
+        improving: Number.isFinite(visiblePlacementChange) && visiblePlacementChange < -0.1
       },
       pageOrder: row.sourceIndex,
       source: {
@@ -162,10 +188,11 @@ export function buildCompRankings(response = {}, options = {}) {
   const eligible = comps.filter((comp) => comp.stats.games >= minSamples);
   const improving = comps
     .filter((comp) => comp.trend.improving)
-    // MetaTFT's /comps page is ordered by average placement by default. The
-    // trend summary takes the first three blue-arrow rows in that same order,
-    // rather than selecting unstable low-tier comps by largest raw swing.
-    .sort((left, right) => left.stats.avgPlacement - right.stats.avgPlacement
+    // Emerging strength rewards both a meaningful placement improvement and
+    // enough play rate to make that change credible. The square root keeps
+    // popularity from overwhelming the actual improvement signal.
+    .sort((left, right) => right.trend.emergenceScore - left.trend.emergenceScore
+      || left.trend.avgPlacementChange - right.trend.avgPlacementChange
       || right.stats.games - left.stats.games
       || left.pageOrder - right.pageOrder)
     .slice(0, 3)
@@ -178,16 +205,17 @@ export function buildCompRankings(response = {}, options = {}) {
   const metricMap = {
     top4_rate: "top4Rate",
     win_rate: "winRate",
+    win_share: "winShare",
     avg_placement: "avgPlacement",
     popularity: "popularity"
   };
-  const rankings = { top4Rate: [], winRate: [], avgPlacement: [], popularity: [] };
-  for (const metric of query.metrics ?? ["top4_rate", "win_rate"]) {
+  const rankings = { top4Rate: [], winRate: [], winShare: [], avgPlacement: [], popularity: [] };
+  for (const metric of query.metrics ?? ["top4_rate", "win_share"]) {
     const key = metricMap[metric];
     if (!key) continue;
     rankings[key] = [...eligible]
       .sort(metricComparator(metric))
-      .slice(0, query.limit ?? 3);
+      .slice(0, query.limit ?? 5);
   }
 
   return {
@@ -203,7 +231,8 @@ export function buildCompRankings(response = {}, options = {}) {
         ? "metatft"
         : null,
       windowHours: 72,
-      threshold: 0.1
+      threshold: 0.1,
+      officialGate
     },
     query,
     source: {
