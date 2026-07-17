@@ -1,4 +1,4 @@
-# TFT Agent
+# tftclarity
 
 Data-driven in-game decision assistant and small-window plugin for Teamfight Tactics.
 
