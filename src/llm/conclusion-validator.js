@@ -85,6 +85,9 @@ function readText(value, path, limit, errors, { nullable = false, records = null
 
 function evidenceRecords(evidence) {
   const records = new Map();
+  for (const record of evidence?.structuredEvidence ?? []) {
+    if (record?.evidenceId) records.set(record.evidenceId, record);
+  }
   for (const record of evidence?.recommendations ?? []) {
     if (record?.evidenceId) records.set(record.evidenceId, record);
   }
@@ -92,6 +95,9 @@ function evidenceRecords(evidence) {
     if (record?.evidenceId) records.set(record.evidenceId, record);
   }
   for (const record of evidence?.comparison?.options ?? []) {
+    if (record?.evidenceId) records.set(record.evidenceId, record);
+  }
+  for (const record of evidence?.semanticEvidence ?? []) {
     if (record?.evidenceId) records.set(record.evidenceId, record);
   }
   return records;
@@ -112,6 +118,10 @@ function recordNames(record) {
     if (typeof value.name === "string") names.push(value.name);
   };
   collect(record?.item);
+  collect(record);
+  collect(record?.metadata);
+  if (record?.metadata?.canonicalName) names.push(record.metadata.canonicalName);
+  for (const alias of record?.metadata?.aliases ?? []) names.push(alias);
   for (const item of record?.items ?? []) collect(item);
   for (const item of record?.representativeItems ?? []) collect(item);
   for (const pairing of record?.commonPairings ?? []) {
@@ -190,12 +200,85 @@ function statsFor(records) {
   return [...records].map((record) => record?.stats).filter(Boolean);
 }
 
-function validateNumbers(text, records, path, errors) {
+function collectNumericValues(value, output = new Set(), seen = new Set()) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    output.add(value);
+    return output;
+  }
+  if (!value || typeof value !== "object" || seen.has(value)) return output;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectNumericValues(entry, output, seen));
+  } else {
+    Object.values(value).forEach((entry) => collectNumericValues(entry, output, seen));
+  }
+  return output;
+}
+
+function textNumericValues(value, output = new Set()) {
+  for (const match of String(value ?? "").matchAll(/(?<![A-Za-z0-9_])(-?\d+(?:\.\d+)?)(?![A-Za-z0-9_])/gu)) {
+    output.add(Number(match[1]));
+  }
+  return output;
+}
+
+function allowedNumericValues(records, evidence) {
+  const values = new Set();
+  for (const record of records) {
+    collectNumericValues(record, values);
+    if (record?.authority === "official_static_catalog" || /description/u.test(String(record?.type ?? ""))) {
+      textNumericValues(record?.text, values);
+    }
+  }
+  collectNumericValues(evidence?.query, values);
+  return values;
+}
+
+function matchesAllowedNumber(value, allowed) {
+  for (const candidate of allowed) {
+    const representations = [
+      candidate,
+      ...[0, 1, 2, 3, 4].map((digits) => Number(candidate.toFixed(digits)))
+    ];
+    if (candidate >= 0 && candidate <= 1) {
+      const percentage = candidate * 100;
+      representations.push(percentage, ...[0, 1, 2].map((digits) => Number(percentage.toFixed(digits))));
+    }
+    if (representations.some((entry) => Math.abs(entry - value) <= 0.00005)) return true;
+  }
+  return false;
+}
+
+function validateGenericNumbers(text, records, evidence, path, errors) {
+  let remaining = String(text ?? "")
+    .replace(/\d+(?:\.\d+)?\s*%/gu, " ")
+    .replace(/\d+\s*(?:场|局|个?样本)/gu, " ")
+    .replace(/(?:均名|平均名次)\s*(?:为|是|[:：])?\s*\d+(?:\.\d+)?/gu, " ")
+    .replace(/(?:提升|改善)(?:幅度)?\s*(?:为|是|[:：])?\s*\d+(?:\.\d+)?/gu, " ");
+  for (const name of [...records].flatMap(recordNames).filter((name) => /\d/u.test(name))) {
+    remaining = remaining.replace(new RegExp(escapedPattern(name), "gu"), " ");
+  }
+  const allowed = allowedNumericValues(records, evidence);
+  for (const match of remaining.matchAll(/(?<![A-Za-z0-9_])(-?\d+(?:\.\d+)?)(?![A-Za-z0-9_])/gu)) {
+    const value = Number(match[1]);
+    if (!matchesAllowedNumber(value, allowed)) {
+      errors.push(`${path} contains unsupported number: ${match[0]}`);
+    }
+  }
+}
+
+function validateNumbers(text, records, evidence, path, errors) {
   const stats = statsFor(records);
+  const semanticRates = [...records].flatMap((record) => (
+    record?.authority === "official_static_catalog" || /description/u.test(String(record?.type ?? ""))
+      ? [...String(record?.text ?? "").matchAll(/(\d+(?:\.\d+)?)\s*%/gu)].map((match) => Number(match[1]))
+      : []
+  ));
   const rates = stats.flatMap((entry) => [entry.top4Rate, entry.winRate, entry.pickRate])
     .concat([...records].flatMap((record) => [record?.appearanceRate, record?.coverage]))
     .filter(Number.isFinite)
-    .map((value) => Number((value * 100).toFixed(1)));
+    .map((value) => Number((value * 100).toFixed(1)))
+    .concat(semanticRates);
   const games = stats.map((entry) => Number(entry.games))
     .concat([...records].flatMap((record) => [
       ...(record?.commonPairings ?? []).map((pairing) => Number(pairing?.games)),
@@ -234,6 +317,7 @@ function validateNumbers(text, records, path, errors) {
       errors.push(`${path} contains unsupported trend improvement: ${match[0]}`);
     }
   }
+  validateGenericNumbers(text, records, evidence, path, errors);
 }
 
 function validateNames(text, names, knownCatalogNames, path, errors) {
@@ -308,7 +392,7 @@ function validateTextFacts(text, records, evidence, catalog, path, errors) {
   validateCoreClaim(text, records, evidence, path, errors);
   const names = allowedNames(evidence, records, catalog);
   validateNames(text, names, catalogNames(catalog), path, errors);
-  validateNumbers(text, records, path, errors);
+  validateNumbers(text, records, evidence, path, errors);
 }
 
 function readEntries(value, path, maxEntries, records, evidence, catalog, errors) {
@@ -347,7 +431,7 @@ function pathFromError(message) {
 
 function categoryForError(message) {
   const value = String(message);
-  if (/unsupported (?:percentage|sample count|average placement|trend improvement)/u.test(value)) return "unsupported_number";
+  if (/unsupported (?:number|percentage|sample count|average placement|trend improvement)/u.test(value)) return "unsupported_number";
   if (/entity absent|API name absent|quoted entity absent|unknown evidence/u.test(value)) return "unsupported_entity";
   if (/omits displayed evidence/u.test(value)) return "missing_coverage";
   if (/risk notice|freshness risk/u.test(value)) return "missing_risk_notice";
@@ -363,6 +447,10 @@ function idsFromError(message) {
 function allowedNumbers(evidence) {
   const values = new Set();
   for (const record of evidenceRecords(evidence).values()) {
+    collectNumericValues(record, values);
+    if (record?.authority === "official_static_catalog" || /description/u.test(String(record?.type ?? ""))) {
+      textNumericValues(record?.text, values);
+    }
     for (const value of Object.values(record?.stats ?? {})) {
       if (Number.isFinite(Number(value))) values.add(Number(value));
     }

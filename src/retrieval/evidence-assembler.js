@@ -53,19 +53,25 @@ function decorateStructured(record, metadata) {
 
 function normalizeSemantic(record, index) {
   const evidenceId = clipped(record?.evidenceId ?? record?.id ?? `semantic:${index + 1}`, 160);
+  const source = clipped(record?.source ?? record?.metadata?.source ?? "semantic_index", 80);
   return {
     evidenceId,
     type: clipped(record?.documentType ?? record?.type ?? "static_description", 80),
     text: clipped(record?.text ?? record?.content ?? record?.metadata?.content ?? "", 1400),
-    score: Number.isFinite(Number(record?.score)) ? Number(record.score) : null,
-    authority: "official_static_catalog",
-    source: clipped(record?.source ?? record?.metadata?.source ?? "semantic_index", 80),
+    authority: /official|tencent/iu.test(source) ? "official_static_catalog" : "semantic_context",
+    source,
     patch: record?.patch ?? record?.metadata?.patch ?? null,
     locale: record?.locale ?? record?.metadata?.locale ?? null,
     visible: Boolean(record?.visible ?? record?.metadata?.visible ?? true),
     metadata: {
       ...(record?.apiName ? { apiName: clipped(record.apiName, 160) } : {}),
-      ...(record?.intent ? { intent: clipped(record.intent, 80) } : {})
+      ...(record?.intent ? { intent: clipped(record.intent, 80) } : {}),
+      ...(record?.metadata?.canonicalName ? {
+        canonicalName: clipped(record.metadata.canonicalName, 160)
+      } : {}),
+      ...(Array.isArray(record?.metadata?.aliases) ? {
+        aliases: record.metadata.aliases.slice(0, 20).map((alias) => clipped(alias, 160)).filter(Boolean)
+      } : {})
     }
   };
 }

@@ -60,8 +60,22 @@ function envelope(status, options = {}) {
     corrections: Math.max(0, Number(options.corrections ?? 0)),
     transportRetries: Math.max(0, Number(options.transportRetries ?? 0)),
     ...(options.cached ? { cached: true } : {}),
+    ...(options.supportingEvidence?.length ? { supportingEvidence: options.supportingEvidence } : {}),
     ...(options.validationFeedback ? { validationFeedback: options.validationFeedback } : {})
   };
+}
+
+function visibleSupportingEvidence(evidence) {
+  return (evidence?.semanticEvidence ?? [])
+    .filter((record) => record?.visible !== false && record?.text)
+    .map((record) => ({
+      evidenceId: String(record.evidenceId),
+      type: String(record.type ?? "static_description"),
+      text: String(record.text),
+      source: String(record.source ?? "semantic_index"),
+      patch: record.patch ?? null,
+      locale: record.locale ?? null
+    }));
 }
 
 function isStale(result) {
@@ -213,6 +227,7 @@ export async function generateEvidenceBackedConclusion({
   }
 
   const cacheKey = makeConclusionCacheKey(evidence, config);
+  const supportingEvidence = visibleSupportingEvidence(evidence);
   if (!bypassCache) {
     const cached = await cacheGet(cacheStore, cacheKey);
     if (cached?.value?.kind === "llm_conclusion" && cached.value.content) {
@@ -220,7 +235,8 @@ export async function generateEvidenceBackedConclusion({
         content: cached.value.content,
         model: cached.value.model ?? model,
         latencyMs: Date.now() - startedAt,
-        cached: true
+        cached: true,
+        supportingEvidence
       });
       emit(config, { type: "conclusion_generated", status: value.status, cached: true, latencyMs: value.latencyMs, model: value.model });
       return value;
@@ -294,7 +310,8 @@ export async function generateEvidenceBackedConclusion({
           latencyMs: Date.now() - startedAt,
           attempts,
           corrections,
-          transportRetries
+          transportRetries,
+          supportingEvidence
         });
         emit(config, { type: corrections ? "conclusion_corrected" : "conclusion_generated", status: value.status, attempts, corrections, transportRetries, model });
         return value;

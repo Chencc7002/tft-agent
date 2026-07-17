@@ -2,8 +2,11 @@ import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadLocalEnvironment } from "../src/config/load-env.js";
 import { createCatalog } from "../src/data/static-data.js";
+import { fetchOfficialTftEntityDetails } from "../src/data/official-entity-details.js";
+import { fetchOfficialTftItemDetails } from "../src/data/official-item-details.js";
 import {
   SQLiteSemanticDocumentStore,
+  attachOfficialSemanticDescriptions,
   buildSemanticCorpus,
   buildSemanticIndex,
   createEmbeddingProviderFromConfig,
@@ -65,18 +68,49 @@ async function loadCorpusInput(filePath, options = {}) {
   return Array.isArray(parsed) ? { documents: parsed } : parsed;
 }
 
+async function withOfficialStaticDescriptions(catalog, args) {
+  const enabled = args["no-official-details"] !== true
+    && (!args.input || args["refresh-official"] === true);
+  if (!enabled) return catalog;
+  const timeoutMs = Number(args["official-timeout"] ?? process.env.TFT_AGENT_OFFICIAL_CATALOG_TIMEOUT_MS ?? 10000);
+  try {
+    const [entityDetails, itemDetails] = await Promise.all([
+      fetchOfficialTftEntityDetails({ timeoutMs }),
+      fetchOfficialTftItemDetails({ timeoutMs })
+    ]);
+    return attachOfficialSemanticDescriptions(catalog, {
+      entityDetails,
+      itemDetails,
+      patch: args.patch ?? catalog.patch,
+      locale: args.locale ?? catalog.locale
+    });
+  } catch (error) {
+    if (args["allow-missing-official-details"] !== true) {
+      throw new Error(
+        `Official static description catalog is required for a complete semantic index: ${error.message}. `
+        + "Use --allow-missing-official-details only for an explicit degraded build."
+      );
+    }
+    return {
+      ...catalog,
+      semanticDescriptionWarning: `official_static_details_unavailable:${error.message}`
+    };
+  }
+}
+
 loadLocalEnvironment();
 const args = argumentsFor(process.argv.slice(2));
 const filePath = resolve(String(args.db ?? process.env.TFT_AGENT_SEMANTIC_INDEX_PATH ?? ".cache/semantic-index.sqlite"));
 const requestedPatch = String(args.patch ?? process.env.TFT_AGENT_PATCH ?? "current");
 const requestedLocale = String(args.locale ?? process.env.TFT_AGENT_SEMANTIC_LOCALE ?? "zh-CN");
-const catalog = await loadCorpusInput(args.input, {
+let catalog = await loadCorpusInput(args.input, {
   catalogCachePath: args["catalog-cache"],
   compsInputPath: args["comps-input"],
   patch: requestedPatch,
   locale: requestedLocale,
   allowSeedCatalog: args["allow-seed-catalog"] === true
 });
+catalog = await withOfficialStaticDescriptions(catalog, args);
 const patch = String(args.patch ?? catalog.patch ?? requestedPatch);
 const locale = String(args.locale ?? catalog.locale ?? requestedLocale);
 const config = resolveEmbeddingProviderConfig({}, process.env);
@@ -112,6 +146,8 @@ try {
     patch,
     locale,
     catalogSource: catalog.semanticCatalogSource ?? (args.input ? "explicit_input" : "seed_catalog"),
+    descriptionCoverage: catalog.semanticDescriptionCoverage ?? null,
+    descriptionWarning: catalog.semanticDescriptionWarning ?? null,
     countsByType
   }, null, 2)}\n`);
 } finally {

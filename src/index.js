@@ -286,6 +286,7 @@ export {
   buildSemanticCorpus
 } from "./retrieval/semantic-corpus.js";
 export {
+  attachOfficialSemanticDescriptions,
   catalogFromRuntimeCacheSnapshot,
   createStaticCompCatalog,
   loadCompleteSemanticCatalog,

@@ -38,7 +38,22 @@ test("conclusion service validates, caches, and reuses generated content", async
   const cacheStore = new MemoryCacheStore();
   let calls = 0;
   const provider = async () => { calls += 1; return output(); };
-  const args = { result: buildResult(), catalog, input: "霞已有羊刀怎么补？", config, provider, cacheStore };
+  const args = {
+    result: buildResult(),
+    catalog,
+    input: "霞已有羊刀怎么补？",
+    config,
+    provider,
+    cacheStore,
+    semanticEvidence: [{
+      id: "item-description:rageblade",
+      documentType: "item_description",
+      text: "鬼索的狂暴之刃是当前版本目录中的装备。",
+      source: "official_catalog",
+      patch: "current",
+      visible: true
+    }]
+  };
   const first = await generateEvidenceBackedConclusion(args);
   const second = await generateEvidenceBackedConclusion(args);
   assert.equal(first.status, "generated");
@@ -46,6 +61,8 @@ test("conclusion service validates, caches, and reuses generated content", async
   assert.equal(second.cached, true);
   assert.equal(calls, 1);
   assert.equal(first.content.headline, output().headline);
+  assert.equal(first.supportingEvidence.length, 1);
+  assert.deepEqual(second.supportingEvidence, first.supportingEvidence);
 });
 
 test("conclusion service falls back on invalid output without changing the recommendation", async () => {

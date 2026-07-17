@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  attachOfficialSemanticDescriptions,
   buildSemanticCorpus,
   catalogFromRuntimeCacheSnapshot,
   createStaticCompCatalog,
@@ -139,4 +140,87 @@ test("complete semantic catalog loader combines runtime cache and comp identity 
     comps: 1
   });
   assert.equal(catalog.semanticCatalogSource, "runtime_catalog_cache");
+});
+
+test("official current catalogs add versioned unit, item, trait, and emblem descriptions", () => {
+  const catalog = {
+    patch: "current",
+    locale: "zh-CN",
+    semanticCatalogSource: "runtime_catalog_cache",
+    units: [{
+      apiName: "TFT17_MasterYi",
+      zhName: "易大师",
+      aliases: ["剑圣"],
+      current: true
+    }],
+    items: [{
+      apiName: "TFT_Item_GuinsoosRageblade",
+      zhName: "鬼索的狂暴之刃",
+      aliases: ["羊刀"],
+      category: "ordinary_completed",
+      current: true
+    }, {
+      apiName: "TFT17_Item_DarkStarEmblemItem",
+      zhName: "暗星纹章",
+      aliases: ["暗星转"],
+      category: "emblem",
+      current: true
+    }],
+    traits: [{
+      apiName: "TFT17_DarkStar",
+      filterId: "TFT17_DarkStar_2",
+      zhName: "暗星",
+      aliases: ["暗星4"],
+      current: true
+    }],
+    comps: []
+  };
+  const entityDetails = {
+    units: new Map([["TFT17_MasterYi", {
+      name: "易大师",
+      traitNames: ["暗星"],
+      ability: { name: "无极剑道", description: "获得持续衰减的攻击速度。" },
+      source: { version: "16.14", updatedAt: "2026-07-15T00:00:00Z" }
+    }]]),
+    traits: new Map([["TFT17_DarkStar", {
+      name: "暗星",
+      description: "暗星弈子获得强化。",
+      levels: [{ units: 2, effect: "获得10%强化" }],
+      source: { version: "16.14" }
+    }]]),
+    meta: { version: "16.14" }
+  };
+  const itemDetails = new Map([
+    ["TFT_Item_GuinsoosRageblade", {
+      name: "鬼索的狂暴之刃",
+      effect: "攻击提供可叠加的攻击速度。",
+      keywords: ["羊刀"],
+      recipe: [{ apiName: "TFT_Item_RecurveBow", name: "反曲之弓" }],
+      craftable: true
+    }],
+    ["TFT17_Item_DarkStarEmblemItem", {
+      name: "暗星纹章",
+      effect: "携带者获得暗星羁绊。",
+      keywords: ["暗星转"],
+      recipe: [],
+      craftable: false
+    }]
+  ]);
+
+  const enriched = attachOfficialSemanticDescriptions(catalog, { entityDetails, itemDetails });
+  assert.deepEqual(enriched.semanticDescriptionCoverage, {
+    units: { total: 1, described: 1 },
+    items: { total: 2, described: 2 },
+    traits: { total: 1, described: 1 }
+  });
+  assert.match(enriched.semanticCatalogSource, /official_static_details/u);
+
+  const documents = buildSemanticCorpus(enriched);
+  const byType = new Map(documents.map((document) => [document.documentType, document]));
+  assert.match(byType.get("unit_description").content, /无极剑道/u);
+  assert.match(byType.get("item_description").content, /攻击速度/u);
+  assert.match(byType.get("item_description").content, /羊刀/u);
+  assert.match(byType.get("trait_description").content, /2人/u);
+  assert.match(byType.get("emblem_description").content, /获得暗星羁绊/u);
+  assert.equal(documents.some((document) => /games|avgPlacement|top4Rate/u.test(document.content)), false);
 });

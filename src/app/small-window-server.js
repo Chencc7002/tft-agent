@@ -28,6 +28,7 @@ import {
   createCatalog,
   createConclusionProviderFromConfig,
   createEmbeddingProviderFromConfig,
+  createIntentEnvelope,
   createPersistentSemanticRetriever,
   createAssetResolver,
   createStructuredParserFromConfig,
@@ -42,6 +43,7 @@ import {
   parseQuery,
   recommendForInput,
   generateEvidenceBackedConclusion,
+  RetrievalPlanner,
   resolveConclusionProviderConfig,
   resolveEmbeddingProviderConfig,
   retrieveSemanticPlan,
@@ -57,6 +59,7 @@ const DEFAULT_SQLITE_CACHE_PATH = resolve(process.cwd(), ".cache", "small-window
 const DEFAULT_SEMANTIC_INDEX_PATH = resolve(process.cwd(), ".cache", "semantic-index.sqlite");
 const PUBLIC_DIR = fileURLToPath(new URL("./small-window-ui/", import.meta.url));
 const ASSET_RESOLVER = createAssetResolver();
+const DETAIL_RETRIEVAL_PLANNER = new RetrievalPlanner();
 const CONTENT_TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
@@ -423,6 +426,56 @@ function itemName(apiName, catalog) {
 function itemDetailsName(apiName, catalog) {
   const item = catalog.itemByApiName.get(apiName);
   return item?.preferredDisplayName ?? item?.zhName ?? item?.shortName ?? apiName;
+}
+
+function attachDetailRetrievalMetadata(payload, input, catalog) {
+  const intent = payload?.type;
+  const entityType = intent === "unit_details"
+    ? "unit"
+    : intent === "item_details"
+      ? "item"
+      : intent === "trait_details"
+        ? "trait"
+        : null;
+  if (!entityType) return payload;
+  const apiName = entityType === "unit"
+    ? payload?.unit?.apiName
+    : entityType === "item"
+      ? payload?.item?.apiName
+      : payload?.trait?.apiName;
+  if (!apiName) return payload;
+  const entityMatch = {
+    entityType,
+    apiName,
+    alias: payload?.[entityType]?.name ?? apiName,
+    matchType: "exact_catalog",
+    confidence: 1
+  };
+  const parsed = {
+    rawInput: String(input ?? ""),
+    intent,
+    confidence: 1,
+    parser: { entityMatches: [entityMatch] },
+    ...(entityType === "unit" ? { unit: apiName } : {}),
+    ...(entityType === "item" ? { ownedItems: [apiName] } : {}),
+    ...(entityType === "trait" ? { traitFilters: [apiName] } : {})
+  };
+  const query = {
+    intent,
+    warnings: [],
+    ...(entityType === "unit" ? { unit: apiName } : {}),
+    ...(entityType === "item" ? { lockedItems: [apiName] } : {}),
+    ...(entityType === "trait" ? { traitFilters: [apiName] } : {})
+  };
+  const intentEnvelope = createIntentEnvelope({
+    input,
+    parsed,
+    query,
+    validation: { valid: true, errors: [], warnings: [] },
+    catalog
+  });
+  const retrievalPlan = DETAIL_RETRIEVAL_PLANNER.plan(intentEnvelope);
+  return { ...payload, intentEnvelope, retrievalPlan };
 }
 
 function isItemDetailsQuestion(input) {
@@ -1915,11 +1968,17 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
       aliasMemory,
       preferences
     };
-    return { statusCode: 200, payload: entityDetailsPayload };
+    return {
+      statusCode: 200,
+      payload: attachDetailRetrievalMetadata(entityDetailsPayload, input, catalog)
+    };
   }
   const itemDetailsPayload = await serializeItemDetailsQuery(input, catalog, runtime);
   if (itemDetailsPayload) {
-    return { statusCode: 200, payload: itemDetailsPayload };
+    return {
+      statusCode: 200,
+      payload: attachDetailRetrievalMetadata(itemDetailsPayload, input, catalog)
+    };
   }
   const parsedForIntent = parseQuery(input, { catalog });
   const compEntityClarification = serializeCompRankingEntityClarification(parsedForIntent, catalog);

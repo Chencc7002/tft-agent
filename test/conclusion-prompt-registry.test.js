@@ -26,6 +26,7 @@ test("PromptRegistry selects prompts only from a validated intent and never gues
   assert.equal(await registry.load("unit_details"), null);
   assert.equal(await registry.load("item_details"), null);
   assert.equal(await registry.load("trait_details"), null);
+  assert.equal(await registry.load("unit_item_availability"), null);
   assert.equal(await registry.load("unit_item_rank"), null);
   assert.equal(getConclusionPromptRoute("unit_item_rank"), null);
 });
