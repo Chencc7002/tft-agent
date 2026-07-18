@@ -181,7 +181,7 @@ npm run smoke:sqlite
 & "C:\path\to\node.exe" scripts\smoke-sqlite-cache.mjs
 ```
 
-有 `node:sqlite` 或 `better-sqlite3` 时，脚本会创建 SQLite 文件并覆盖 `user_preferences`、`session_state`、`query_cache`、`default_context_cache`、`item_catalog`、`units`、`traits`、`entity_aliases` 和 `feedback_events` 的读写清理链路；没有 driver 时会输出 `SQLite smoke skipped` 并保持 0 退出码，表示当前环境仍应使用默认 JSON store。
+有 `node:sqlite` 或 `better-sqlite3` 时，脚本会创建 SQLite 文件并覆盖 `user_preferences`、`session_state`、`query_cache`、`default_context_cache`、`item_catalog`、`units`、`traits`、`entity_aliases`、`query_events` 和 `feedback_events` 的读写清理链路；没有 driver 时会输出 `SQLite smoke skipped` 并保持 0 退出码，表示当前环境仍应使用默认 JSON store。
 
 自 2026-07-13 起，小窗已移除“阵容”自动补全策略。单英雄查询只有在玩家输入阵容名称或完整阵容签名时才会携带 Comp 条件；未输入阵容时不会从 `/comp_options` 或 `exact_units_traits2` 自动选择候选。`/comp_options` 仍可作为动态英雄/羁绊目录的辅助来源，但不得转化为查询条件。
 

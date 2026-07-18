@@ -130,10 +130,10 @@
   - `MemoryCacheStore`、`JsonFileCacheStore`、`SQLiteCacheStore` 统一提供装备和 domain catalog 的读写清理接口；`clearDomainCatalog` 统一返回删除的英雄/羁绊记录数。清查询历史保留版本目录，完整清空才删除。
   - 新增短期状态清理接口：`clearQueryCache`、`clearDefaultContextCache`、`clearSessionState`、`clearQueryHistory`/`clearTransient` 可清掉查询缓存、默认阵容缓存和会话追问历史，同时保留长期用户偏好。
   - 新增反馈/候选别名记忆接口：`addFeedbackEvent` / `listFeedbackEvents` 和 `addEntityAlias` / `findEntityAliases` / `listEntityAliases`，用于保存用户纠错、低置信 alias/RAG 候选；候选别名可保持 `enabled=false`，不会自动污染主字典。
-  - 反馈幂等查找已从“最近 500 条”下沉为 store 级 `findFeedbackEventByFeedbackId`：Memory/JSON 扫描完整内存集合，SQLite 扫描完整持久表；小窗按 `feedbackId` 串行化同进程并发写入，超过 500 条历史或两个并发请求都只保留首次反馈。
+  - 反馈幂等已改为服务端生成的确定性 `feedback_id`：Memory/JSON 会拒绝重复 ID，SQLite 使用唯一索引与 `ON CONFLICT DO NOTHING` 作为最终并发权威；V1 采用首次提交后不可修改的规则。
   - 新增候选别名审核接口：`setEntityAliasEnabled` 可显式启用/停用候选别名；小窗加载 catalog 时只会合并 `enabled=true` 且目标实体存在于当前 catalog 的别名。
 - 实现 SQLite Cache Store 起步版：
-  - 新增 `SQLiteCacheStore` 与 `SQLITE_CACHE_SCHEMA`，覆盖 `user_preferences`、`session_state`、`query_cache`、`default_context_cache`、`entity_aliases`、`item_catalog`、`units`、`traits`、`feedback_events` 等文档规划表。
+  - 新增 `SQLiteCacheStore` 与 `SQLITE_CACHE_SCHEMA`，覆盖 `user_preferences`、`session_state`、`query_cache`、`default_context_cache`、`entity_aliases`、`item_catalog`、`units`、`traits`、`query_events`、`feedback_events` 等文档规划表。
   - 对外接口与现有 `MemoryCacheStore` / `JsonFileCacheStore` 保持一致，支持 query/default-context/session 的 TTL、stale 读取、过期清理、长期 user preferences，以及 `entity_aliases` / `feedback_events` 的写入和查询。
   - 当前作为可选 store 使用：可注入同步 SQLite database，或在支持环境中通过 `SQLiteCacheStore.open()` 使用 `node:sqlite` / `better-sqlite3`；小窗默认仍保留零依赖 JSON store。
   - 小窗服务已支持 `TFT_AGENT_CACHE_STORE=sqlite` / `TFT_AGENT_CACHE_PATH=...`，Node 服务参数 `--cache-store sqlite --cache-path ...`，以及 PowerShell 启动器参数 `-CacheStore sqlite -CachePath ...`。
@@ -184,8 +184,10 @@
   - 提供 `POST /api/session/clear`，可清空当前 `last_query` 追问上下文。
   - 提供 `POST /api/cache/clear`，可清空 query/default-context/session 短期缓存和运行时 catalog cache，但不会重置 `small_window` 长期偏好。
   - 提供 `GET /api/runtime`，返回脱敏后的缓存类型和 LLM provider/mode/model 状态；endpoint 与 API key 只返回是否已配置。
-  - 提供 `POST /api/feedback`，可保存用户纠错、好/坏结果反馈，并可将 alias 候选以禁用状态写入候选库等待人工确认。
-  - 每张小窗结果卡新增上/下反馈图标；提交内容只包含输入、结构化查询、该卡装备 API id、统计快照和缓存命中状态，不保存 MetaTFT 原始响应。`feedbackId` 在服务端做幂等，同一卡首次反馈后按钮锁定；反馈只写 `feedback_events`，不会静默修改偏好、catalog 或排序。
+  - `POST /api/recommend` 会生成服务端 `queryId` 并将脱敏后的查询、结果卡、缓存与 LLM 元数据写入 `query_events`；公开反馈必须属于当前匿名访客，不能跨访客引用查询。
+  - 提供 `POST /api/feedback`，浏览器只提交 `queryId + target + cardIndex + rating + 可选原因`。服务端从查询快照重建反馈，忽略客户端伪造的推荐指标；差评原因使用固定枚举。
+  - 每张小窗结果卡新增上/下反馈图标和可选差评原因；`feedback_id` 由服务端确定，SQLite 唯一约束保证同一目标只保留首次反馈。反馈只写 `feedback_events`，不会静默修改偏好、catalog 或排序。
+  - 新增独立访客/IP 反馈限流、90 天查询快照保留期、受 Bearer token 保护的 `GET /api/admin/feedback/stats` 聚合统计，以及可执行一致性检查的 `npm run backup:sqlite` 备份命令。
   - 提供 `POST /api/entity-memory/clear`，删除未启用候选别名与反馈事件，保留已启用别名和长期偏好，满足反馈记忆可清空要求。
   - 提供 `GET /api/entity-aliases`、`POST /api/entity-aliases/review` 与 `POST /api/entity-aliases/review-batch`，用于查看候选别名并人工单条或批量启用/停用；启用后会清理运行时 catalog cache，下一次查询即可走规则解析命中。
   - `GET /api/entity-aliases` 支持 `enabled`、`entityType`、`apiName`、`query`、`limit`、`offset` 参数，并返回 `pagination`，用于小窗候选审核的筛选和分页。

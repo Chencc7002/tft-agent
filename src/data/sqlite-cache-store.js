@@ -119,13 +119,46 @@ CREATE TABLE IF NOT EXISTS traits (
 CREATE INDEX IF NOT EXISTS idx_traits_patch
 ON traits(patch, current);
 
-CREATE TABLE IF NOT EXISTS feedback_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  feedback_type TEXT NOT NULL,
-  payload_json TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+CREATE TABLE IF NOT EXISTS query_events (
+  query_id TEXT PRIMARY KEY,
+  visitor_scope TEXT NOT NULL,
+  conversation_id TEXT,
+  input TEXT NOT NULL,
+  result_type TEXT,
+  query_json TEXT,
+  response_json TEXT,
+  patch TEXT,
+  cache_hit INTEGER NOT NULL DEFAULT 0,
+  cache_stale INTEGER NOT NULL DEFAULT 0,
+  llm_used INTEGER NOT NULL DEFAULT 0,
+  llm_model TEXT,
+  duration_ms INTEGER,
   created_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_query_events_visitor
+ON query_events(visitor_scope, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_query_events_created
+ON query_events(created_at);
+
+CREATE TABLE IF NOT EXISTS feedback_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  feedback_id TEXT NOT NULL UNIQUE,
+  query_id TEXT,
+  visitor_scope TEXT,
+  feedback_target TEXT,
+  feedback_type TEXT NOT NULL,
+  rating TEXT,
+  card_index INTEGER,
+  reason TEXT,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (query_id) REFERENCES query_events(query_id) ON DELETE SET NULL
+);
+
 `;
 
 const STORE_TABLES = {
@@ -184,6 +217,66 @@ function bindGet(statement, params = []) {
 
 function bindAll(statement, params = []) {
   return statement.all(...params);
+}
+
+function ensureFeedbackSchema(database) {
+  const columns = [
+    ["feedback_id", "TEXT"],
+    ["query_id", "TEXT"],
+    ["visitor_scope", "TEXT"],
+    ["feedback_target", "TEXT"],
+    ["rating", "TEXT"],
+    ["card_index", "INTEGER"],
+    ["reason", "TEXT"],
+    ["updated_at", "TEXT"]
+  ];
+  for (const [name, type] of columns) {
+    try {
+      database.exec(`ALTER TABLE feedback_events ADD COLUMN ${name} ${type}`);
+    } catch (error) {
+      if (!/duplicate column|already exists/iu.test(String(error?.message ?? error))) throw error;
+    }
+  }
+  database.exec(`
+    UPDATE feedback_events
+    SET feedback_id = json_extract(payload_json, '$.feedbackId')
+    WHERE feedback_id IS NULL AND json_valid(payload_json);
+    UPDATE feedback_events
+    SET feedback_id = 'legacy:' || id
+    WHERE feedback_id IS NOT NULL
+      AND id NOT IN (
+        SELECT MIN(id) FROM feedback_events
+        WHERE feedback_id IS NOT NULL
+        GROUP BY feedback_id
+      );
+    UPDATE feedback_events
+    SET feedback_id = 'legacy:' || id
+    WHERE feedback_id IS NULL OR TRIM(feedback_id) = '';
+    UPDATE feedback_events SET updated_at = created_at WHERE updated_at IS NULL;
+    DROP INDEX IF EXISTS idx_feedback_id_unique;
+    CREATE UNIQUE INDEX idx_feedback_id_unique
+    ON feedback_events(feedback_id);
+    CREATE TRIGGER IF NOT EXISTS feedback_id_required_insert
+    BEFORE INSERT ON feedback_events
+    WHEN NEW.feedback_id IS NULL OR TRIM(NEW.feedback_id) = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'feedback_id is required');
+    END;
+    CREATE TRIGGER IF NOT EXISTS feedback_id_required_update
+    BEFORE UPDATE OF feedback_id ON feedback_events
+    WHEN NEW.feedback_id IS NULL OR TRIM(NEW.feedback_id) = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'feedback_id is required');
+    END;
+    CREATE INDEX IF NOT EXISTS idx_feedback_query
+    ON feedback_events(query_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_visitor
+    ON feedback_events(visitor_scope, created_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_type
+    ON feedback_events(feedback_type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_created
+    ON feedback_events(created_at);
+  `);
 }
 
 function normalizeAliasValue(value) {
@@ -249,9 +342,36 @@ function rowToEntityAlias(row) {
 function rowToFeedbackEvent(row) {
   return {
     id: row.id,
+    feedbackId: row.feedback_id ?? null,
+    queryId: row.query_id ?? null,
+    visitorScope: row.visitor_scope ?? null,
+    feedbackTarget: row.feedback_target ?? null,
     feedbackType: row.feedback_type,
-    payload: JSON.parse(row.payload_json),
+    rating: row.rating ?? null,
+    cardIndex: Number.isInteger(row.card_index) ? row.card_index : null,
+    reason: row.reason ?? null,
+    payload: JSON.parse(row.payload_json ?? "{}"),
     status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at
+  };
+}
+
+function rowToQueryEvent(row) {
+  return {
+    queryId: row.query_id,
+    visitorScope: row.visitor_scope,
+    conversationId: row.conversation_id ?? null,
+    input: row.input,
+    resultType: row.result_type ?? null,
+    query: row.query_json ? JSON.parse(row.query_json) : null,
+    response: row.response_json ? JSON.parse(row.response_json) : null,
+    patch: row.patch ?? null,
+    cacheHit: Boolean(row.cache_hit),
+    cacheStale: Boolean(row.cache_stale),
+    llmUsed: Boolean(row.llm_used),
+    llmModel: row.llm_model ?? null,
+    durationMs: Number.isFinite(row.duration_ms) ? row.duration_ms : null,
     createdAt: row.created_at
   };
 }
@@ -304,6 +424,7 @@ export class SQLiteCacheStore {
     };
     this.now = options.now ?? (() => Date.now());
     this.database.exec(SQLITE_CACHE_SCHEMA);
+    ensureFeedbackSchema(this.database);
   }
 
   _get(store, key, options = {}) {
@@ -904,35 +1025,116 @@ export class SQLiteCacheStore {
     ])?.changes ?? 0);
   }
 
+  addQueryEvent(record = {}) {
+    const queryId = String(record.queryId ?? record.query_id ?? "").trim();
+    const visitorScope = String(record.visitorScope ?? record.visitor_scope ?? "").trim();
+    const input = String(record.input ?? "").trim();
+    if (!queryId || !visitorScope || !input) {
+      throw new Error("addQueryEvent requires queryId, visitorScope, and input");
+    }
+    const createdAt = record.createdAt ?? record.created_at ?? new Date(this.now()).toISOString();
+    bindRun(this.database.prepare(`
+      INSERT INTO query_events (
+        query_id, visitor_scope, conversation_id, input, result_type,
+        query_json, response_json, patch, cache_hit, cache_stale,
+        llm_used, llm_model, duration_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `), [
+      queryId,
+      visitorScope,
+      record.conversationId ?? record.conversation_id ?? null,
+      input,
+      record.resultType ?? record.result_type ?? null,
+      record.query == null ? null : JSON.stringify(cloneValue(record.query)),
+      record.response == null ? null : JSON.stringify(cloneValue(record.response)),
+      record.patch ?? null,
+      (record.cacheHit ?? record.cache_hit) ? 1 : 0,
+      (record.cacheStale ?? record.cache_stale) ? 1 : 0,
+      (record.llmUsed ?? record.llm_used) ? 1 : 0,
+      record.llmModel ?? record.llm_model ?? null,
+      Number.isFinite(Number(record.durationMs ?? record.duration_ms))
+        ? Number(record.durationMs ?? record.duration_ms)
+        : null,
+      createdAt
+    ]);
+    return this.getQueryEvent(queryId);
+  }
+
+  getQueryEvent(queryId) {
+    const row = bindGet(this.database.prepare(`
+      SELECT query_id, visitor_scope, conversation_id, input, result_type,
+             query_json, response_json, patch, cache_hit, cache_stale,
+             llm_used, llm_model, duration_ms, created_at
+      FROM query_events
+      WHERE query_id = ?
+    `), [String(queryId ?? "")]);
+    return row ? rowToQueryEvent(row) : null;
+  }
+
+  pruneQueryEventsBefore(createdBefore) {
+    return Number(bindRun(this.database.prepare(
+      "DELETE FROM query_events WHERE created_at < ?"
+    ), [String(createdBefore ?? "")])?.changes ?? 0);
+  }
+
   addFeedbackEvent(feedbackType, payload = {}, options = {}) {
     const type = String(feedbackType ?? "").trim();
     if (!type) throw new Error("addFeedbackEvent requires feedbackType");
 
     const createdAt = options.createdAt ?? new Date(this.now()).toISOString();
+    const updatedAt = options.updatedAt ?? createdAt;
+    const feedbackId = String(options.feedbackId ?? payload.feedbackId ?? "").trim();
+    if (!feedbackId) throw new Error("addFeedbackEvent requires feedbackId");
     const status = String(options.status ?? "pending");
     const result = bindRun(this.database.prepare(`
-      INSERT INTO feedback_events (feedback_type, payload_json, status, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO feedback_events (
+        feedback_id, query_id, visitor_scope, feedback_target, feedback_type,
+        rating, card_index, reason, payload_json, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(feedback_id) DO NOTHING
     `), [
+      feedbackId,
+      options.queryId ?? null,
+      options.visitorScope ?? null,
+      options.feedbackTarget ?? null,
       type,
+      options.rating ?? null,
+      Number.isInteger(options.cardIndex) ? options.cardIndex : null,
+      options.reason ?? null,
       JSON.stringify(cloneValue(payload)),
       status,
-      createdAt
+      createdAt,
+      updatedAt
     ]);
+
+    if (Number(result?.changes ?? result?.changesCount ?? 0) < 1) {
+      const existing = this.findFeedbackEventByFeedbackId(feedbackId);
+      return existing ? { ...existing, duplicate: true } : null;
+    }
 
     return {
       id: Number(result?.lastInsertRowid ?? result?.lastID ?? 0) || null,
+      feedbackId,
+      queryId: options.queryId ?? null,
+      visitorScope: options.visitorScope ?? null,
+      feedbackTarget: options.feedbackTarget ?? null,
       feedbackType: type,
+      rating: options.rating ?? null,
+      cardIndex: Number.isInteger(options.cardIndex) ? options.cardIndex : null,
+      reason: options.reason ?? null,
       payload: cloneValue(payload),
       status,
-      createdAt
+      createdAt,
+      updatedAt
     };
   }
 
   listFeedbackEvents(options = {}) {
     const limit = positiveInteger(options.limit, 100);
     const rows = bindAll(this.database.prepare(`
-      SELECT id, feedback_type, payload_json, status, created_at
+      SELECT id, feedback_id, query_id, visitor_scope, feedback_target,
+             feedback_type, rating, card_index, reason, payload_json,
+             status, created_at, updated_at
       FROM feedback_events
       ORDER BY id DESC
       LIMIT ?
@@ -949,16 +1151,14 @@ export class SQLiteCacheStore {
   findFeedbackEventByFeedbackId(feedbackId) {
     const id = String(feedbackId ?? "");
     if (!id) return null;
-    const rows = bindAll(this.database.prepare(`
-      SELECT id, feedback_type, payload_json, status, created_at
+    const row = bindGet(this.database.prepare(`
+      SELECT id, feedback_id, query_id, visitor_scope, feedback_target,
+             feedback_type, rating, card_index, reason, payload_json,
+             status, created_at, updated_at
       FROM feedback_events
-      ORDER BY id DESC
-    `));
-    for (const row of rows) {
-      const entry = rowToFeedbackEvent(row);
-      if (entry?.payload?.feedbackId === id) return entry;
-    }
-    return null;
+      WHERE feedback_id = ?
+    `), [id]);
+    return row ? rowToFeedbackEvent(row) : null;
   }
 
   clearFeedbackEvents(options = {}) {
@@ -1052,6 +1252,7 @@ export class SQLiteCacheStore {
     bindRun(this.database.prepare("DELETE FROM units"));
     bindRun(this.database.prepare("DELETE FROM traits"));
     bindRun(this.database.prepare("DELETE FROM feedback_events"));
+    bindRun(this.database.prepare("DELETE FROM query_events"));
     bindRun(this.database.prepare("DELETE FROM comp_trend_history"));
   }
 }

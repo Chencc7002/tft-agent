@@ -53,6 +53,7 @@ cp .env.production.example .env.production
 
 - 把 `DOMAIN` 改为实际域名。
 - 使用 `openssl rand -base64 48` 生成 `TFT_AGENT_VISITOR_SECRET`。
+- 再生成一个不同的随机值填写 `TFT_AGENT_ADMIN_TOKEN`；它只用于受保护的反馈统计接口，不要与访客密钥复用。
 - 第一轮灰度建议保持两个 LLM 模式为 `never` / `off`，先验证基础查询和外部数据源。
 - 准备开放 AI 时，再填写服务商地址、模型和密钥，并从较低的全站日额度开始。
 
@@ -84,7 +85,28 @@ docker compose up -d --build
 docker image prune -f
 ```
 
-更新前先备份数据卷。第一版最重要的数据是匿名额度和缓存，即使丢失也不会影响账号或订单，因为 V1 没有这些数据。
+更新前先备份 SQLite：
+
+```bash
+docker compose exec app npm run backup:sqlite
+docker compose exec app ls -lh /app/.cache/backups
+```
+
+备份命令使用 SQLite `VACUUM INTO` 生成一致性快照，并自动执行 `PRAGMA integrity_check`。备份保存在持久化数据卷的 `/app/.cache/backups` 中；定期用 `docker compose cp` 复制到服务器卷外，再同步到腾讯云 COS 或另一台机器。
+
+需要恢复时，先确认备份文件名，然后停止应用、保留当前库、覆盖并修复文件属主：
+
+```bash
+mkdir -p backups
+docker compose stop app
+docker compose cp app:/app/.cache/tft-agent.sqlite ./backups/pre-restore.sqlite
+docker compose cp ./backups/你的备份文件.sqlite app:/app/.cache/tft-agent.sqlite
+docker compose run --rm --user root app chown node:node /app/.cache/tft-agent.sqlite
+docker compose up -d app
+docker compose ps
+```
+
+恢复完成后检查 `/api/health` 和应用日志。V1 的查询快照默认保留 90 天，反馈长期保留；可通过 `TFT_AGENT_QUERY_EVENT_RETENTION_DAYS` 调整快照保留期。
 
 ## 8. 日常检查
 
@@ -96,6 +118,15 @@ docker stats
 ```
 
 同时在腾讯云控制台设置 CPU、内存、磁盘和月流量告警。LLM 服务商侧还应设置余额告警或硬预算，不能只依赖应用额度。
+
+反馈汇总接口默认统计最近 30 天，只返回聚合结果，不返回访客明细：
+
+```bash
+curl -H "Authorization: Bearer $TFT_AGENT_ADMIN_TOKEN" \
+  "https://你的域名/api/admin/feedback/stats?days=30"
+```
+
+未配置令牌或令牌错误时，该接口统一返回 404；公开模式下的别名维护、目录审计等内部接口同样不可访问。
 
 ## 9. 上线顺序
 

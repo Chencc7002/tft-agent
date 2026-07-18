@@ -123,6 +123,7 @@ class FakeSQLiteDatabase {
       session_state: new Map(),
       user_preferences: new Map(),
       entity_aliases: new Map(),
+      query_events: new Map(),
       feedback_events: new Map()
     };
     this.nextEntityAliasId = 1;
@@ -259,14 +260,38 @@ class FakeSQLiteDatabase {
     }
 
     if (/INSERT INTO feedback_events/i.test(sql)) {
-      const [feedback_type, payload_json, status, created_at] = params;
+      const [
+        feedback_id,
+        query_id,
+        visitor_scope,
+        feedback_target,
+        feedback_type,
+        rating,
+        card_index,
+        reason,
+        payload_json,
+        status,
+        created_at,
+        updated_at
+      ] = params;
+      const duplicate = [...this.tables.feedback_events.values()]
+        .find((row) => row.feedback_id === feedback_id);
+      if (duplicate) return { changes: 0 };
       const id = this.nextFeedbackEventId++;
       this.tables.feedback_events.set(id, {
         id,
+        feedback_id,
+        query_id,
+        visitor_scope,
+        feedback_target,
         feedback_type,
+        rating,
+        card_index,
+        reason,
         payload_json,
         status,
-        created_at
+        created_at,
+        updated_at
       });
       return {
         changes: 1,
@@ -327,6 +352,10 @@ class FakeSQLiteDatabase {
   get(sql, params) {
     if (/FROM entity_aliases\s+WHERE id = \?/i.test(sql)) {
       return this.tables.entity_aliases.get(params[0]) ?? null;
+    }
+    if (/FROM feedback_events\s+WHERE feedback_id = \?/i.test(sql)) {
+      return [...this.tables.feedback_events.values()]
+        .find((row) => row.feedback_id === params[0]) ?? null;
     }
     const match = sql.match(/FROM (\w+) WHERE (\w+) = \?/i);
     if (!match) throw new Error(`FakeSQLiteDatabase does not support SQL: ${sql}`);

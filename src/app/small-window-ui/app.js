@@ -593,11 +593,6 @@ function renderCompRankings(data) {
     <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
 }
 
-function newResultId() {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 function feedbackActions(cardIndex) {
   const sentiment = state.feedbackByCard[cardIndex];
   return `
@@ -605,6 +600,40 @@ function feedbackActions(cardIndex) {
       <button type="button" class="feedback-button${sentiment === "good" ? " selected" : ""}" data-result-feedback="good" data-card-index="${cardIndex}" aria-label="${t("helpful")}" title="${t("helpful")}" ${sentiment ? "disabled" : ""}>↑ <span>${t("helpful")}</span></button>
       <button type="button" class="feedback-button${sentiment === "bad" ? " selected" : ""}" data-result-feedback="bad" data-card-index="${cardIndex}" aria-label="${t("notHelpful")}" title="${t("notHelpful")}" ${sentiment ? "disabled" : ""}>↓ <span>${t("notHelpful")}</span></button>
       <span class="feedback-status" aria-live="polite">${sentiment ? t("recorded") : ""}</span>
+      ${feedbackReasonPicker("recommendation", cardIndex)}
+    </div>
+  `;
+}
+
+function feedbackReasonPicker(target, cardIndex = null) {
+  const recommendationOptions = [
+    ["entity_parse_error", "feedbackReasonEntityParse"],
+    ["wrong_comp_context", "feedbackReasonCompContext"],
+    ["wrong_items", "feedbackReasonItems"],
+    ["outdated_data", "feedbackReasonOutdated"],
+    ["low_sample", "feedbackReasonLowSample"],
+    ["answer_unclear", "feedbackReasonUnclear"],
+    ["other", "feedbackReasonOther"]
+  ];
+  const explanationOptions = [
+    ["answer_unclear", "feedbackReasonUnclear"],
+    ["explanation_incorrect", "feedbackReasonIncorrect"],
+    ["missing_information", "feedbackReasonMissing"],
+    ["outdated_data", "feedbackReasonOutdated"],
+    ["other", "feedbackReasonOther"]
+  ];
+  const options = target === "explanation" ? explanationOptions : recommendationOptions;
+  const cardAttribute = Number.isInteger(cardIndex) ? ` data-card-index="${cardIndex}"` : "";
+  return `
+    <div class="feedback-reasons" data-feedback-reasons="${target}"${cardAttribute} hidden>
+      <label>
+        <span>${t("feedbackReasonPrompt")}</span>
+        <select data-feedback-reason>
+          <option value="">${t("feedbackReasonSkip")}</option>
+          ${options.map(([value, key]) => `<option value="${value}">${t(key)}</option>`).join("")}
+        </select>
+      </label>
+      <button type="button" class="feedback-reason-submit" data-feedback-reason-submit="${target}">${t("feedbackReasonSend")}</button>
     </div>
   `;
 }
@@ -1052,7 +1081,7 @@ function generatedConclusionCard(data) {
     ${supportingEvidence ? `<details class="conclusion-supporting-evidence"><summary>${t("staticEvidence")}</summary><ul>${supportingEvidence}</ul></details>` : ""}
     ${content.nextAction ? `<div class="conclusion-action"><strong>${t("nextAction")}</strong><span>${escapeHtml(content.nextAction)}</span></div>` : ""}
     ${content.riskNotice ? `<div class="conclusion-risk">${escapeHtml(content.riskNotice)}</div>` : ""}
-    <div class="conclusion-footer"><small>${escapeHtml(conclusion.model ?? "LLM")} · ${formatNumber(conclusion.latencyMs ?? 0)}ms</small><div class="result-feedback" data-explanation-feedback-group><button type="button" class="feedback-button${feedback === "good" ? " selected" : ""}" data-explanation-feedback="good">${t("explanationHelpful")}</button><button type="button" class="feedback-button${feedback === "bad" ? " selected" : ""}" data-explanation-feedback="bad">${t("explanationNotHelpful")}</button><span class="feedback-status">${feedback ? t("recorded") : ""}</span></div></div>
+    <div class="conclusion-footer"><small>${escapeHtml(conclusion.model ?? "LLM")} · ${formatNumber(conclusion.latencyMs ?? 0)}ms</small><div class="result-feedback" data-explanation-feedback-group><button type="button" class="feedback-button${feedback === "good" ? " selected" : ""}" data-explanation-feedback="good">${t("explanationHelpful")}</button><button type="button" class="feedback-button${feedback === "bad" ? " selected" : ""}" data-explanation-feedback="bad">${t("explanationNotHelpful")}</button><span class="feedback-status">${feedback ? t("recorded") : ""}</span>${feedbackReasonPicker("explanation")}</div></div>
   </section>`;
 }
 
@@ -1253,7 +1282,7 @@ function renderCurrentResult(data) {
 
 function renderResult(data) {
   state.lastResult = data;
-  state.lastResultId = newResultId();
+  state.lastResultId = data.queryId ?? null;
   state.feedbackByCard = {};
   state.explanationFeedback = null;
   rawOutputEl.textContent = data.text ?? JSON.stringify(data, null, 2);
@@ -1556,11 +1585,8 @@ async function saveEntityCandidate(candidate) {
       "content-type": "application/json"
     },
     body: JSON.stringify({
+      queryId: state.lastResultId,
       feedbackType: "alias_candidate",
-      payload: {
-        input: state.lastInput,
-        candidate
-      },
       aliasCandidate: {
         alias: candidate.inputFragment,
         entityType: candidate.entityType,
@@ -1576,7 +1602,7 @@ async function saveEntityCandidate(candidate) {
   if (appShell.settings.open) await loadAliases();
 }
 
-async function sendResultFeedback(sentiment, cardIndex) {
+async function sendResultFeedback(sentiment, cardIndex, reason = null) {
   const data = state.lastResult;
   const card = data?.cards?.[cardIndex];
   if (!card || !state.lastResultId) throw new Error(t("feedbackUnavailable"));
@@ -1587,40 +1613,11 @@ async function sendResultFeedback(sentiment, cardIndex) {
       "content-type": "application/json"
     },
     body: JSON.stringify({
-      feedbackType: sentiment === "good" ? "good_recommendation" : "bad_recommendation",
-      payload: {
-        feedbackId: `${state.lastResultId}:${cardIndex}`,
-        input: state.lastInput,
-        cardIndex,
-        query: {
-          unit: data.query?.unit,
-          starLevel: data.query?.starLevel,
-          traitFilters: data.query?.traitFilters,
-          itemPolicy: data.query?.itemPolicy,
-          ownedItems: data.query?.ownedItems,
-          excludedItems: data.query?.excludedItems,
-          comparisonOptions: data.query?.comparison?.itemApiNames,
-          minSamples: data.query?.minSamples,
-          sort: data.query?.sort,
-          patch: data.query?.patch,
-          days: data.query?.days,
-          rankFilter: data.query?.rankFilter
-        },
-        recommendation: {
-          title: card.title,
-          items: card.items.map((item) => item.apiName),
-          top4: card.stats.top4,
-          win: card.stats.win,
-          avg: card.stats.avg,
-          games: card.stats.games,
-          lowSample: card.lowSample,
-          winner: card.winner
-        },
-        cache: {
-          hit: data.cache?.query?.hit,
-          stale: data.cache?.query?.stale
-        }
-      }
+      queryId: state.lastResultId,
+      target: "recommendation",
+      cardIndex,
+      rating: sentiment === "good" ? "helpful" : "unhelpful",
+      ...(reason ? { reason } : {})
     })
   });
   const payload = await response.json();
@@ -1628,22 +1625,17 @@ async function sendResultFeedback(sentiment, cardIndex) {
   return payload;
 }
 
-async function sendExplanationFeedback(sentiment) {
+async function sendExplanationFeedback(sentiment, reason = null) {
   const conclusion = state.lastResult?.answer?.generatedConclusion;
   if (!conclusion?.content || !state.lastResultId) throw new Error(t("feedbackUnavailable"));
   const response = await fetch("/api/feedback", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      feedbackType: sentiment === "good" ? "good_explanation" : "bad_explanation",
-      payload: {
-        feedbackId: `${state.lastResultId}:explanation`,
-        input: state.lastInput.slice(0, 500),
-        resultType: state.lastResult?.type ?? null,
-        model: conclusion.model ?? null,
-        cached: Boolean(conclusion.cached),
-        headline: conclusion.content.headline
-      }
+      queryId: state.lastResultId,
+      target: "explanation",
+      rating: sentiment === "good" ? "helpful" : "unhelpful",
+      ...(reason ? { reason } : {})
     })
   });
   const payload = await response.json();
@@ -1867,11 +1859,51 @@ async function handleResultClick(event) {
     if (state.lastInput && !state.requestInFlight) requestRecommendation(true);
     return;
   }
+  const reasonSubmit = event.target.closest("button[data-feedback-reason-submit]");
+  if (reasonSubmit) {
+    const target = reasonSubmit.dataset.feedbackReasonSubmit;
+    const reasonGroup = reasonSubmit.closest("[data-feedback-reasons]");
+    const group = reasonSubmit.closest(".result-feedback");
+    const reason = reasonGroup?.querySelector("[data-feedback-reason]")?.value || null;
+    const buttons = [...(group?.querySelectorAll(".feedback-button") ?? [])];
+    const status = group?.querySelector(".feedback-status");
+    buttons.forEach((button) => { button.disabled = true; });
+    reasonSubmit.disabled = true;
+    try {
+      if (target === "explanation") {
+        await sendExplanationFeedback("bad", reason);
+        state.explanationFeedback = "bad";
+        group?.querySelector('[data-explanation-feedback="bad"]')?.classList.add("selected");
+      } else {
+        const cardIndex = Number(reasonGroup?.dataset.cardIndex);
+        await sendResultFeedback("bad", cardIndex, reason);
+        state.feedbackByCard[cardIndex] = "bad";
+        group?.querySelector('[data-result-feedback="bad"]')?.classList.add("selected");
+      }
+      reasonGroup.hidden = true;
+      if (status) status.textContent = t("recorded");
+      setStatusKey("statusRecorded");
+    } catch (error) {
+      buttons.forEach((button) => { button.disabled = false; });
+      reasonSubmit.disabled = false;
+      if (status) status.textContent = t("saveFailed");
+      setStatus(error.message);
+    }
+    return;
+  }
   const explanationButton = event.target.closest("button[data-explanation-feedback]");
   if (explanationButton) {
     const group = explanationButton.closest("[data-explanation-feedback-group]");
     const buttons = [...(group?.querySelectorAll("button[data-explanation-feedback]") ?? [])];
     const status = group?.querySelector(".feedback-status");
+    if (explanationButton.dataset.explanationFeedback === "bad") {
+      const reasonGroup = group?.querySelector('[data-feedback-reasons="explanation"]');
+      if (reasonGroup) {
+        reasonGroup.hidden = false;
+        reasonGroup.querySelector("[data-feedback-reason]")?.focus();
+        return;
+      }
+    }
     buttons.forEach((button) => { button.disabled = true; });
     try {
       const sentiment = explanationButton.dataset.explanationFeedback;
@@ -1892,6 +1924,14 @@ async function handleResultClick(event) {
     const group = feedbackButton.closest("[data-feedback-card]");
     const buttons = [...(group?.querySelectorAll("button[data-result-feedback]") ?? [])];
     const status = group?.querySelector(".feedback-status");
+    if (feedbackButton.dataset.resultFeedback === "bad") {
+      const reasonGroup = group?.querySelector('[data-feedback-reasons="recommendation"]');
+      if (reasonGroup) {
+        reasonGroup.hidden = false;
+        reasonGroup.querySelector("[data-feedback-reason]")?.focus();
+        return;
+      }
+    }
     buttons.forEach((button) => { button.disabled = true; });
     try {
       await sendResultFeedback(

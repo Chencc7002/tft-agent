@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1526,6 +1526,10 @@ export function createSmallWindowRuntime(options = {}) {
     semanticDocumentStore: options.semanticDocumentStore ?? null,
     semanticConfig: options.semanticConfig ?? { enabled: false, provider: "off" },
     accessService: options.accessService ?? null,
+    adminToken: String(options.adminToken ?? "").trim() || null,
+    queryEventRetentionDays: Number.isInteger(Number(options.queryEventRetentionDays))
+      ? Math.max(0, Number(options.queryEventRetentionDays))
+      : 90,
     recommendForInputImpl: options.recommendForInputImpl ?? recommendForInput
   };
 }
@@ -1558,7 +1562,10 @@ export async function createSmallWindowRuntimeAsync(options = {}, env = process.
     ...requestTimeouts,
     ...structuredParserRuntime,
     ...conclusionRuntime,
-    ...semanticRuntime
+    ...semanticRuntime,
+    adminToken: options.adminToken ?? env.TFT_AGENT_ADMIN_TOKEN,
+    queryEventRetentionDays: options.queryEventRetentionDays
+      ?? env.TFT_AGENT_QUERY_EVENT_RETENTION_DAYS
   };
 
   const finalizeRuntime = (runtime) => {
@@ -1924,6 +1931,39 @@ function quotaWrappedCallable(callable, accessService, visitor) {
   return wrapped;
 }
 
+async function persistQueryResponse(payload, runtime, details = {}) {
+  const queryId = randomUUID();
+  const visitorScope = String(details.scope ?? "local");
+  const conclusion = payload.answer?.generatedConclusion ?? null;
+  const responseSnapshot = structuredClone(payload);
+  delete responseSnapshot.access;
+  payload.queryId = queryId;
+  await runtime.cacheStore?.addQueryEvent?.({
+    queryId,
+    visitorScope,
+    conversationId: details.conversationId,
+    input: details.input,
+    resultType: payload.type ?? null,
+    query: payload.query ?? null,
+    response: responseSnapshot,
+    patch: payload.query?.patch ?? payload.source?.patch ?? null,
+    cacheHit: Boolean(payload.cache?.query?.hit),
+    cacheStale: Boolean(payload.cache?.query?.stale),
+    llmUsed: conclusion?.status === "generated",
+    llmModel: conclusion?.model ?? null,
+    durationMs: Date.now() - details.startedAt
+  });
+
+  const retentionDays = Number(runtime.queryEventRetentionDays ?? 90);
+  const now = Date.now();
+  if (retentionDays > 0 && now - Number(runtime.queryEventsPrunedAt ?? 0) >= 24 * 60 * 60 * 1000) {
+    runtime.queryEventsPrunedAt = now;
+    const cutoff = new Date(now - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    await runtime.cacheStore?.pruneQueryEventsBefore?.(cutoff);
+  }
+  return payload;
+}
+
 export async function handleRecommendRequest(body, runtime, context = {}) {
   const startedAt = Date.now();
   const input = String(body?.input ?? "").trim();
@@ -1945,6 +1985,19 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
       }
     };
   }
+
+  const completeResponse = async (payload) => {
+    await persistQueryResponse(payload, runtime, {
+      scope,
+      conversationId,
+      input,
+      startedAt
+    });
+    if (context.accessService && context.visitor) {
+      payload.access = context.accessService.publicStatus(context.visitor);
+    }
+    return { statusCode: 200, payload };
+  };
 
   const storedPreferences = await loadStoredSmallWindowPreferences(runtime, scope);
   const explicitPreferences = preferenceOverrides({
@@ -1968,17 +2021,11 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
       aliasMemory,
       preferences
     };
-    return {
-      statusCode: 200,
-      payload: attachDetailRetrievalMetadata(entityDetailsPayload, input, catalog)
-    };
+    return completeResponse(attachDetailRetrievalMetadata(entityDetailsPayload, input, catalog));
   }
   const itemDetailsPayload = await serializeItemDetailsQuery(input, catalog, runtime);
   if (itemDetailsPayload) {
-    return {
-      statusCode: 200,
-      payload: attachDetailRetrievalMetadata(itemDetailsPayload, input, catalog)
-    };
+    return completeResponse(attachDetailRetrievalMetadata(itemDetailsPayload, input, catalog));
   }
   const parsedForIntent = parseQuery(input, { catalog });
   const compEntityClarification = serializeCompRankingEntityClarification(parsedForIntent, catalog);
@@ -1989,7 +2036,7 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
       aliasMemory,
       preferences
     };
-    return { statusCode: 200, payload: compEntityClarification };
+    return completeResponse(compEntityClarification);
   }
   const structuredParserMode = preferences.structuredParserMode === "inherit"
     ? runtime.useStructuredParser
@@ -2066,13 +2113,7 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
   if (result.intentEnvelope) payload.intentEnvelope = result.intentEnvelope;
   if (result.retrievalPlan) payload.retrievalPlan = result.retrievalPlan;
   Object.assign(payload, conversationMeta({ conversationId }));
-  if (context.accessService && context.visitor) {
-    payload.access = context.accessService.publicStatus(context.visitor);
-  }
-  return {
-    statusCode: 200,
-    payload
-  };
+  return completeResponse(payload);
 }
 
 export async function handlePreferencesRequest(body, runtime, scope = null) {
@@ -2187,7 +2228,7 @@ function normalizeRecommendationFeedbackPayload(value = {}, feedbackType) {
   };
 }
 
-export async function handleFeedbackRequest(body, runtime) {
+async function handleLegacyFeedbackRequest(body, runtime) {
   const feedbackType = normalizeFeedbackType(body?.feedbackType ?? body?.feedback_type);
   const rawPayload = body?.payload && typeof body.payload === "object"
     ? body.payload
@@ -2213,6 +2254,14 @@ export async function handleFeedbackRequest(body, runtime) {
     }
 
     const feedback = await runtime.cacheStore?.addFeedbackEvent?.(feedbackType, payload, {
+      feedbackId: payload.feedbackId ?? `legacy:${randomUUID()}`,
+      feedbackTarget: feedbackType === "good_explanation" || feedbackType === "bad_explanation"
+        ? "explanation"
+        : feedbackType === "good_recommendation" || feedbackType === "bad_recommendation"
+          ? "recommendation"
+          : "legacy",
+      rating: feedbackType.startsWith("good_") ? "helpful" : feedbackType.startsWith("bad_") ? "unhelpful" : null,
+      cardIndex: Number.isInteger(payload.cardIndex) ? payload.cardIndex : null,
       status: body?.status ?? "pending"
     });
     const alias = aliasCandidate
@@ -2239,6 +2288,222 @@ export async function handleFeedbackRequest(body, runtime) {
       runtime.feedbackWriteLocks.delete(lockKey);
     }
   }
+}
+
+const FEEDBACK_TARGETS = new Set(["recommendation", "explanation"]);
+const FEEDBACK_RATINGS = new Set(["helpful", "unhelpful"]);
+const FEEDBACK_REASONS = new Set([
+  "entity_parse_error",
+  "wrong_comp_context",
+  "wrong_items",
+  "outdated_data",
+  "low_sample",
+  "answer_unclear",
+  "explanation_incorrect",
+  "missing_information",
+  "other"
+]);
+
+function feedbackHttpError(message, statusCode) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+function normalizeTrustedFeedback(body = {}) {
+  const queryId = String(body.queryId ?? body.query_id ?? "").trim();
+  const target = String(body.target ?? "").trim();
+  const rating = String(body.rating ?? "").trim();
+  const cardIndex = body.cardIndex === undefined || body.cardIndex === null
+    ? null
+    : Number(body.cardIndex);
+  const reason = String(body.reason ?? "").trim() || null;
+  if (!queryId || !FEEDBACK_TARGETS.has(target) || !FEEDBACK_RATINGS.has(rating)) {
+    throw feedbackHttpError("Feedback requires a valid queryId, target, and rating", 400);
+  }
+  if (target === "recommendation" && (!Number.isInteger(cardIndex) || cardIndex < 0)) {
+    throw feedbackHttpError("Recommendation feedback requires a valid cardIndex", 400);
+  }
+  if (reason && (rating !== "unhelpful" || !FEEDBACK_REASONS.has(reason))) {
+    throw feedbackHttpError("Unsupported feedback reason", 400);
+  }
+  return { queryId, target, rating, cardIndex, reason };
+}
+
+async function handleTrustedFeedbackRequest(body, runtime, context = {}) {
+  const normalized = normalizeTrustedFeedback(body);
+  const queryEvent = await runtime.cacheStore?.getQueryEvent?.(normalized.queryId);
+  if (!queryEvent) throw feedbackHttpError("Query not found", 404);
+  const currentScope = String(context.visitor?.scope ?? "local");
+  if (queryEvent.visitorScope !== currentScope) {
+    throw feedbackHttpError("Query not found", 404);
+  }
+
+  const response = queryEvent.response ?? {};
+  let selected = null;
+  if (normalized.target === "recommendation") {
+    selected = response.cards?.[normalized.cardIndex] ?? null;
+    if (!selected) throw feedbackHttpError("Recommendation card not found", 400);
+  } else {
+    selected = response.answer?.generatedConclusion ?? null;
+    if (!selected?.content) throw feedbackHttpError("Explanation not found", 400);
+  }
+
+  const feedbackType = `${normalized.rating === "helpful" ? "good" : "bad"}_${normalized.target}`;
+  const feedbackId = normalized.target === "recommendation"
+    ? `${normalized.queryId}:recommendation:${normalized.cardIndex}`
+    : `${normalized.queryId}:explanation`;
+  const payload = {
+    queryId: normalized.queryId,
+    input: queryEvent.input,
+    resultType: queryEvent.resultType,
+    query: queryEvent.query,
+    recommendation: normalized.target === "recommendation" ? selected : null,
+    explanation: normalized.target === "explanation" ? selected.content : null,
+    cache: {
+      hit: queryEvent.cacheHit,
+      stale: queryEvent.cacheStale
+    },
+    llm: {
+      used: queryEvent.llmUsed,
+      model: queryEvent.llmModel
+    },
+    durationMs: queryEvent.durationMs,
+    reason: normalized.reason
+  };
+  const feedback = await runtime.cacheStore?.addFeedbackEvent?.(feedbackType, payload, {
+    feedbackId,
+    queryId: normalized.queryId,
+    visitorScope: currentScope,
+    feedbackTarget: normalized.target,
+    rating: normalized.rating,
+    cardIndex: normalized.cardIndex,
+    reason: normalized.reason,
+    status: "pending"
+  });
+  return {
+    ok: true,
+    feedback,
+    aliasCandidate: null,
+    duplicate: Boolean(feedback?.duplicate)
+  };
+}
+
+async function handleTrustedAliasCandidateRequest(body, runtime, context = {}) {
+  const queryId = String(body.queryId ?? body.query_id ?? "").trim();
+  const queryEvent = await runtime.cacheStore?.getQueryEvent?.(queryId);
+  if (!queryEvent) throw feedbackHttpError("Query not found", 404);
+  const currentScope = String(context.visitor?.scope ?? "local");
+  if (queryEvent.visitorScope !== currentScope) throw feedbackHttpError("Query not found", 404);
+  const aliasCandidate = normalizeAliasCandidate(body.aliasCandidate ?? body.alias_candidate);
+  if (!aliasCandidate) throw feedbackHttpError("Invalid alias candidate", 400);
+  const feedbackId = `${queryId}:alias:${aliasCandidate.entityType}:${aliasCandidate.apiName}`.slice(0, 160);
+  const payload = {
+    queryId,
+    input: queryEvent.input,
+    candidate: {
+      alias: aliasCandidate.alias,
+      entityType: aliasCandidate.entityType,
+      apiName: aliasCandidate.apiName,
+      confidence: aliasCandidate.confidence,
+      source: aliasCandidate.source
+    }
+  };
+  const feedback = await runtime.cacheStore?.addFeedbackEvent?.("alias_candidate", payload, {
+    feedbackId,
+    queryId,
+    visitorScope: currentScope,
+    feedbackTarget: "alias_candidate",
+    rating: "candidate",
+    status: "pending"
+  });
+  const alias = feedback?.duplicate
+    ? null
+    : await runtime.cacheStore?.addEntityAlias?.(aliasCandidate);
+  return {
+    ok: true,
+    feedback,
+    aliasCandidate: alias,
+    duplicate: Boolean(feedback?.duplicate)
+  };
+}
+
+export async function handleFeedbackRequest(body, runtime, context = {}) {
+  if (body?.queryId || body?.query_id) {
+    if ((body.feedbackType ?? body.feedback_type) === "alias_candidate") {
+      return handleTrustedAliasCandidateRequest(body, runtime, context);
+    }
+    return handleTrustedFeedbackRequest(body, runtime, context);
+  }
+  if (context.accessService?.config?.enabled) {
+    throw feedbackHttpError("Query-linked feedback is required", 400);
+  }
+  return handleLegacyFeedbackRequest(body, runtime);
+}
+
+function incrementFeedbackStat(target, key) {
+  const normalized = String(key ?? "").trim() || "unknown";
+  target[normalized] = Number(target[normalized] ?? 0) + 1;
+}
+
+export async function handleFeedbackStatsRequest(runtime, options = {}) {
+  const days = Number.isInteger(Number(options.days))
+    ? Math.min(365, Math.max(1, Number(options.days)))
+    : 30;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const events = await runtime.cacheStore?.listFeedbackEvents?.({
+    limit: Number.MAX_SAFE_INTEGER
+  }) ?? [];
+  const stats = {
+    total: 0,
+    rated: 0,
+    helpfulRate: null,
+    ratings: {},
+    targets: {},
+    reasons: {},
+    resultTypes: {},
+    units: {},
+    patches: {},
+    models: {},
+    llm: {
+      used: 0,
+      notUsed: 0
+    },
+    cache: {
+      hit: 0,
+      miss: 0,
+      stale: 0
+    }
+  };
+
+  for (const event of events) {
+    if (String(event.createdAt ?? "") < since) continue;
+    stats.total += 1;
+    incrementFeedbackStat(stats.ratings, event.rating);
+    incrementFeedbackStat(stats.targets, event.feedbackTarget);
+    incrementFeedbackStat(stats.resultTypes, event.payload?.resultType);
+    incrementFeedbackStat(stats.units, event.payload?.query?.unit);
+    incrementFeedbackStat(stats.patches, event.payload?.query?.patch);
+    if (event.reason) incrementFeedbackStat(stats.reasons, event.reason);
+    if (event.payload?.llm?.model) incrementFeedbackStat(stats.models, event.payload.llm.model);
+    if (event.payload?.llm?.used) stats.llm.used += 1;
+    else stats.llm.notUsed += 1;
+    if (event.payload?.cache?.stale) stats.cache.stale += 1;
+    if (event.payload?.cache?.hit) stats.cache.hit += 1;
+    else stats.cache.miss += 1;
+  }
+
+  stats.rated = Number(stats.ratings.helpful ?? 0) + Number(stats.ratings.unhelpful ?? 0);
+  if (stats.rated > 0) {
+    stats.helpfulRate = Number((Number(stats.ratings.helpful ?? 0) / stats.rated).toFixed(4));
+  }
+  return {
+    ok: true,
+    range: {
+      days,
+      since,
+      generatedAt: new Date().toISOString()
+    },
+    stats
+  };
 }
 
 export async function handleEntityMemoryClearRequest(runtime) {
@@ -2461,7 +2726,19 @@ function enforceSameOrigin(req) {
 }
 
 function isPublicMaintenanceRoute(pathname) {
-  return pathname.startsWith("/api/entity-") || pathname === "/api/item-catalog-audit";
+  return pathname.startsWith("/api/entity-")
+    || pathname === "/api/item-catalog-audit";
+}
+
+function hasValidAdminToken(req, runtime) {
+  const configured = String(runtime.adminToken ?? "");
+  const authorization = String(req.headers.authorization ?? "");
+  const provided = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  const configuredBuffer = Buffer.from(configured);
+  const providedBuffer = Buffer.from(provided);
+  return configuredBuffer.length > 0
+    && configuredBuffer.length === providedBuffer.length
+    && timingSafeEqual(configuredBuffer, providedBuffer);
 }
 
 export function createSmallWindowHandler(options = {}) {
@@ -2492,6 +2769,12 @@ export function createSmallWindowHandler(options = {}) {
           ok: true,
           access: accessService.publicStatus(visitor)
         });
+      }
+
+      if (accessService.config.enabled
+        && url.pathname.startsWith("/api/admin/")
+        && !hasValidAdminToken(req, runtime)) {
+        return sendJson(res, 404, { ok: false, error: "Not found" });
       }
 
       if (accessService.config.enabled && isPublicMaintenanceRoute(url.pathname)) {
@@ -2556,7 +2839,17 @@ export function createSmallWindowHandler(options = {}) {
 
       if (req.method === "POST" && url.pathname === "/api/feedback") {
         const body = await readJsonRequest(req);
-        return sendJson(res, 200, await handleFeedbackRequest(body, runtime));
+        accessService.enforceFeedbackRate(visitor);
+        return sendJson(res, 200, await handleFeedbackRequest(body, runtime, {
+          visitor,
+          accessService
+        }));
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/admin/feedback/stats") {
+        return sendJson(res, 200, await handleFeedbackStatsRequest(runtime, {
+          days: url.searchParams.get("days")
+        }));
       }
 
       if (req.method === "POST" && url.pathname === "/api/entity-memory/clear") {

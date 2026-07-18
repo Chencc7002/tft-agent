@@ -60,6 +60,14 @@ export function resolveAnonymousAccessConfig(options = {}, env = process.env) {
     requestsPerMinute: nonNegativeInteger(
       options.requestsPerMinute ?? env.TFT_AGENT_REQUESTS_PER_MINUTE,
       30
+    ),
+    feedbackVisitorPerMinute: nonNegativeInteger(
+      options.feedbackVisitorPerMinute ?? env.TFT_AGENT_FEEDBACK_VISITOR_PER_MINUTE,
+      20
+    ),
+    feedbackIpPerMinute: nonNegativeInteger(
+      options.feedbackIpPerMinute ?? env.TFT_AGENT_FEEDBACK_IP_PER_MINUTE,
+      60
     )
   };
 }
@@ -127,6 +135,7 @@ export class AnonymousAccessService {
     this.now = options.now ?? (() => Date.now());
     this.usage = new Map();
     this.minuteWindows = new Map();
+    this.feedbackMinuteWindows = new Map();
     if (this.config.enabled && this.database) this.database.exec(SQLITE_SCHEMA);
   }
 
@@ -188,6 +197,31 @@ export class AnonymousAccessService {
     }
     if (next > this.config.requestsPerMinute) {
       throw Object.assign(new Error("请求过于频繁，请稍后再试"), { statusCode: 429, code: "rate_limited" });
+    }
+  }
+
+  enforceFeedbackRate(visitor) {
+    if (!this.config.enabled) return;
+    const minute = Math.floor(this.now() / 60_000);
+    const subjects = [
+      [`visitor:${visitor.visitorHash}:${minute}`, this.config.feedbackVisitorPerMinute],
+      [`ip:${visitor.ipHash}:${minute}`, this.config.feedbackIpPerMinute]
+    ];
+    for (const [key, limit] of subjects) {
+      if (limit === 0) continue;
+      const next = (this.feedbackMinuteWindows.get(key) ?? 0) + 1;
+      this.feedbackMinuteWindows.set(key, next);
+      if (next > limit) {
+        throw Object.assign(new Error("反馈提交过于频繁，请稍后再试"), {
+          statusCode: 429,
+          code: "feedback_rate_limited"
+        });
+      }
+    }
+    if (this.feedbackMinuteWindows.size > 4000) {
+      for (const key of this.feedbackMinuteWindows.keys()) {
+        if (!key.endsWith(`:${minute}`)) this.feedbackMinuteWindows.delete(key);
+      }
     }
   }
 
