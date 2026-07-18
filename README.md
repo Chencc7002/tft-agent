@@ -21,6 +21,8 @@ The production profile supports anonymous, isolated browser sessions and bounded
 
 See [the Tencent Cloud deployment guide](docs/deploy-tencent-cloud-v1.md) and copy `.env.production.example` to `.env.production` before deployment.
 
+Production feedback is linked to server-generated query snapshots and anonymous visitor scopes. Run `npm run backup:sqlite` inside the app container to create and integrity-check a consistent SQLite backup.
+
 ## Scope
 
 - Structured query parsing and local ranking remain deterministic.

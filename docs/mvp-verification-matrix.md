@@ -100,7 +100,7 @@
 | 会话追问继承上一轮英雄和条件 | 已验证 | “那有羊刀呢”会话测试；来源标记为 `session` |
 | 用户偏好可保存、恢复和清空 | 已验证 | JSON/SQLite store 测试与 `/api/preferences` 小窗测试 |
 | 查询历史、会话和反馈可清空 | 已验证 | `/api/cache/clear`、`/api/session/clear`、`/api/entity-memory/clear` 覆盖查询、候选与结果反馈测试 |
-| 结果卡好/坏反馈安全落库 | 已验证 | 小窗反馈按钮；结构化快照白名单；`feedbackId` 由 Memory/JSON/SQLite 完整集合查找，超过 500 条和同进程并发提交仍只落一条；反馈前后偏好和推荐结果不变；HTTP smoke 重复提交测试 |
+| 结果卡好/坏反馈安全落库 | 已验证 | 服务端 `queryId` 与匿名访客绑定；浏览器使用最小反馈协议；服务端快照重建并忽略伪造指标；SQLite `feedback_id` 唯一索引与 `ON CONFLICT` 只保留首次提交；独立限流、差评原因和受保护聚合统计测试 |
 | 高频输入不调用 LLM | 已验证 | structured parser hot-path 测试 |
 | LLM 只返回受 schema 约束的结构化结果 | 已验证 | schema 要求完整顶层契约，拒绝非法值、未知字段及 snake/camel 重复同义字段，并支持独立 `excluded_items`；无效输出不能驱动远端查询，实体仍需本地字典解析与 QueryValidator |
 | BM25/向量低置信 RAG 只产出候选，不直接执行推荐 | 已验证 | BM25、编辑距离及本地稀疏 TF-IDF cosine 共享按 catalog 缓存的索引；重排中文别名可由 `tfidf_vector` 召回，但置信度封顶 0.88，只进入澄清且 Explorer 调用为 0；候选审核后才进入 catalog |

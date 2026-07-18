@@ -511,7 +511,14 @@ try {
     method: "POST",
     body: JSON.stringify({ input: "霞的纹章哪个最好？" })
   });
-  assertSmoke(emblemItems.type === "unit_item_rankings", "emblem category did not use item rankings");
+  assertSmoke(
+    emblemItems.type === "unit_emblem_rankings",
+    `emblem category did not use its dedicated ranking result: ${JSON.stringify({
+      type: emblemItems.type,
+      query: emblemItems.query,
+      clarification: emblemItems.clarification
+    })}`
+  );
   assertSmoke(emblemItems.query?.minSamples === 0, "emblem category did not default to zero samples");
   assertSmoke(emblemItems.itemRankings?.[0]?.apiName === "TFT17_Item_HPTankEmblemItem", "emblem ranking did not return emblem data");
 

@@ -168,6 +168,7 @@ export class MemoryCacheStore {
     this.domainCatalogs = new Map();
     this.compTrendHistories = new Map();
     this.entityAliases = [];
+    this.queryEvents = new Map();
     this.feedbackEvents = [];
     this.nextEntityAliasId = 1;
     this.nextFeedbackEventId = 1;
@@ -374,17 +375,77 @@ export class MemoryCacheStore {
     return before - this.entityAliases.length;
   }
 
+  addQueryEvent(record = {}) {
+    const queryId = String(record.queryId ?? record.query_id ?? "").trim();
+    const visitorScope = String(record.visitorScope ?? record.visitor_scope ?? "").trim();
+    const input = String(record.input ?? "").trim();
+    if (!queryId || !visitorScope || !input) {
+      throw new Error("addQueryEvent requires queryId, visitorScope, and input");
+    }
+    const entry = {
+      queryId,
+      visitorScope,
+      conversationId: record.conversationId ?? record.conversation_id ?? null,
+      input,
+      resultType: record.resultType ?? record.result_type ?? null,
+      query: cloneValue(record.query ?? null),
+      response: cloneValue(record.response ?? null),
+      patch: record.patch ?? null,
+      cacheHit: Boolean(record.cacheHit ?? record.cache_hit),
+      cacheStale: Boolean(record.cacheStale ?? record.cache_stale),
+      llmUsed: Boolean(record.llmUsed ?? record.llm_used),
+      llmModel: record.llmModel ?? record.llm_model ?? null,
+      durationMs: Number.isFinite(Number(record.durationMs ?? record.duration_ms))
+        ? Number(record.durationMs ?? record.duration_ms)
+        : null,
+      createdAt: record.createdAt ?? record.created_at ?? new Date(this.now()).toISOString()
+    };
+    this.queryEvents.set(queryId, entry);
+    return cloneValue(entry);
+  }
+
+  getQueryEvent(queryId) {
+    const entry = this.queryEvents.get(String(queryId ?? ""));
+    return entry ? cloneValue(entry) : null;
+  }
+
+  pruneQueryEventsBefore(createdBefore) {
+    const cutoff = String(createdBefore ?? "");
+    let count = 0;
+    for (const [queryId, entry] of this.queryEvents.entries()) {
+      if (entry.createdAt >= cutoff) continue;
+      this.queryEvents.delete(queryId);
+      count += 1;
+    }
+    return count;
+  }
+
   addFeedbackEvent(feedbackType, payload = {}, options = {}) {
     const type = String(feedbackType ?? "").trim();
     if (!type) throw new Error("addFeedbackEvent requires feedbackType");
 
+    const feedbackId = String(options.feedbackId ?? payload.feedbackId ?? "").trim() || null;
+    if (feedbackId) {
+      const existing = this.feedbackEvents.find((entry) => entry.feedbackId === feedbackId);
+      if (existing) return { ...cloneValue(existing), duplicate: true };
+    }
+
     const nowMs = this.now();
+    const createdAt = options.createdAt ?? new Date(nowMs).toISOString();
     const entry = {
       id: options.id ?? this.nextFeedbackEventId++,
+      feedbackId,
+      queryId: options.queryId ?? null,
+      visitorScope: options.visitorScope ?? null,
+      feedbackTarget: options.feedbackTarget ?? null,
       feedbackType: type,
+      rating: options.rating ?? null,
+      cardIndex: Number.isInteger(options.cardIndex) ? options.cardIndex : null,
+      reason: options.reason ?? null,
       payload: cloneValue(payload),
       status: String(options.status ?? "pending"),
-      createdAt: options.createdAt ?? new Date(nowMs).toISOString()
+      createdAt,
+      updatedAt: options.updatedAt ?? createdAt
     };
     this.nextFeedbackEventId = Math.max(this.nextFeedbackEventId, Number(entry.id) + 1);
     this.feedbackEvents.push(entry);
@@ -410,7 +471,7 @@ export class MemoryCacheStore {
     const entry = this.feedbackEvents
       .slice()
       .reverse()
-      .find((event) => event.payload?.feedbackId === id);
+      .find((event) => event.feedbackId === id || event.payload?.feedbackId === id);
     return entry ? cloneValue(entry) : null;
   }
 
@@ -476,6 +537,7 @@ export class MemoryCacheStore {
     this.domainCatalogs.clear();
     this.compTrendHistories.clear();
     this.entityAliases = [];
+    this.queryEvents.clear();
     this.feedbackEvents = [];
     this.nextEntityAliasId = 1;
     this.nextFeedbackEventId = 1;
@@ -506,6 +568,7 @@ export class JsonFileCacheStore extends MemoryCacheStore {
       this.domainCatalogs = hydrateMap(data.domainCatalogs);
       this.compTrendHistories = hydrateMap(data.compTrendHistories);
       this.entityAliases = Array.isArray(data.entityAliases) ? data.entityAliases : [];
+      this.queryEvents = hydrateMap(data.queryEvents);
       this.feedbackEvents = Array.isArray(data.feedbackEvents) ? data.feedbackEvents : [];
       this.nextEntityAliasId = positiveInteger(data.nextEntityAliasId, this.entityAliases.length + 1);
       this.nextFeedbackEventId = positiveInteger(data.nextFeedbackEventId, this.feedbackEvents.length + 1);
@@ -518,7 +581,7 @@ export class JsonFileCacheStore extends MemoryCacheStore {
 
   async _persist() {
     const payload = {
-      version: 3,
+      version: 4,
       queryCache: serializeMap(this.queryCache),
       defaultContextCache: serializeMap(this.defaultContextCache),
       sessionState: serializeMap(this.sessionState),
@@ -527,6 +590,7 @@ export class JsonFileCacheStore extends MemoryCacheStore {
       domainCatalogs: serializeMap(this.domainCatalogs),
       compTrendHistories: serializeMap(this.compTrendHistories),
       entityAliases: this.entityAliases,
+      queryEvents: serializeMap(this.queryEvents),
       feedbackEvents: this.feedbackEvents,
       nextEntityAliasId: this.nextEntityAliasId,
       nextFeedbackEventId: this.nextFeedbackEventId
@@ -686,6 +750,25 @@ export class JsonFileCacheStore extends MemoryCacheStore {
     await this._ensureLoaded();
     const count = super.clearEntityAliases(options);
     await this._persistQueued();
+    return count;
+  }
+
+  async addQueryEvent(record = {}) {
+    await this._ensureLoaded();
+    const entry = super.addQueryEvent(record);
+    await this._persistQueued();
+    return entry;
+  }
+
+  async getQueryEvent(queryId) {
+    await this._ensureLoaded();
+    return super.getQueryEvent(queryId);
+  }
+
+  async pruneQueryEventsBefore(createdBefore) {
+    await this._ensureLoaded();
+    const count = super.pruneQueryEventsBefore(createdBefore);
+    if (count > 0) await this._persistQueued();
     return count;
   }
 

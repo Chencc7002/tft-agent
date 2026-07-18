@@ -91,7 +91,8 @@ test("public HTTP mode keeps two browser visitors isolated", async () => {
   const runtime = createSmallWindowRuntime({
     cacheStore: new MemoryCacheStore(),
     catalog: createCatalog(),
-    fetchItems: false
+    fetchItems: false,
+    adminToken: "test-admin-token"
   });
   runtime.accessService = new AnonymousAccessService({
     enabled: true,
@@ -129,6 +130,20 @@ test("public HTTP mode keeps two browser visitors isolated", async () => {
       headers: { cookie: firstCookie }
     });
     assert.equal(hiddenMaintenance.status, 404);
+
+    const hiddenFeedbackStats = await fetch(`${started.url}api/admin/feedback/stats`, {
+      headers: { cookie: firstCookie }
+    });
+    assert.equal(hiddenFeedbackStats.status, 404);
+
+    const feedbackStats = await fetch(`${started.url}api/admin/feedback/stats`, {
+      headers: {
+        cookie: firstCookie,
+        authorization: "Bearer test-admin-token"
+      }
+    });
+    assert.equal(feedbackStats.status, 200);
+    assert.equal((await feedbackStats.json()).stats.total, 0);
   } finally {
     await new Promise((resolve, reject) => started.server.close((error) => error ? reject(error) : resolve()));
   }
