@@ -2,6 +2,7 @@ import { AppShell, TitleBar } from "./app-shell.js";
 import { Composer, ConversationPane } from "./conversation-pane.js";
 import { CompRankingResult, ItemRankingResult, RecommendationResult, ResultPane } from "./result-pane.js";
 import { applyI18n, formatDate, formatNumber, getLocale, localizedName, setLocale, t } from "./i18n.js";
+import { getCurrentPatchNote } from "./patch-notes.js";
 import { WallpaperController } from "./wallpaper-controller.js";
 
 const state = {
@@ -13,6 +14,7 @@ const state = {
   conclusionMode: "inherit",
   rankFilter: [],
   lastInput: "",
+  lastDisplayInput: "",
   lastResult: null,
   lastResultId: null,
   lastSuggestions: [],
@@ -170,6 +172,78 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+const QUICK_TASKS = [
+  {
+    id: "comp-rankings",
+    query: "\u63a8\u8350\u5f53\u524d\u7248\u672c\u70ed\u95e8\u9635\u5bb9",
+    promptKey: "quickTaskCompsPrompt",
+    titleKey: "quickTaskCompsTitle",
+    bodyKey: "quickTaskCompsBody",
+    icon: '<path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/>'
+  },
+  {
+    id: "comp-trends",
+    query: "\u5f53\u524d\u7248\u672c\u9635\u5bb9\u8d8b\u52bf",
+    promptKey: "quickTaskTrendsPrompt",
+    titleKey: "quickTaskTrendsTitle",
+    bodyKey: "quickTaskTrendsBody",
+    icon: '<path d="m4 17 5-5 4 3 7-8"/><path d="M15 7h5v5"/>'
+  },
+  {
+    id: "unit-build",
+    inputTemplateKey: "quickTaskBuildTemplate",
+    selectionKey: "quickTaskBuildSelection",
+    titleKey: "quickTaskBuildTitle",
+    bodyKey: "quickTaskBuildBody",
+    icon: '<path d="m6 18 8-8"/><path d="m12 6 6-2-2 6-8 8-4 2 2-4z"/>'
+  },
+  {
+    id: "patch-notes",
+    view: "patch-note",
+    titleKey: "quickTaskUpdatesTitle",
+    bodyKey: "quickTaskUpdatesBody",
+    icon: '<path d="M6 5h12v14H6z"/><path d="M9 9h6M9 12h6M9 15h4"/>'
+  }
+];
+
+function quickTasksHtml() {
+  const cards = QUICK_TASKS.map((task) => {
+    const isInteractive = task.query || task.view || task.inputTemplateKey;
+    const action = isInteractive
+      ? ` data-quick-task="${escapeHtml(task.id)}"`
+      : " disabled";
+    const trailing = task.badgeKey
+      ? `<span class="quick-task-badge" data-i18n="${task.badgeKey}">${escapeHtml(t(task.badgeKey))}</span>`
+      : '<span class="quick-task-arrow" aria-hidden="true">↗</span>';
+    return `
+      <button type="button" class="quick-task-card${isInteractive ? "" : " is-planned"}"${action}>
+        <span class="quick-task-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${task.icon}</svg></span>
+        <span class="quick-task-copy"><strong data-i18n="${task.titleKey}">${escapeHtml(t(task.titleKey))}</strong><small data-i18n="${task.bodyKey}">${escapeHtml(t(task.bodyKey))}</small></span>
+        ${trailing}
+      </button>
+    `;
+  }).join("");
+  return `
+    <section class="quick-tasks" data-i18n-aria="quickTasksLabel" aria-label="${escapeHtml(t("quickTasksLabel"))}">
+      <div class="quick-tasks-heading">
+        <strong data-i18n="quickTasksTitle">${escapeHtml(t("quickTasksTitle"))}</strong>
+        <span data-i18n="quickTasksHint">${escapeHtml(t("quickTasksHint"))}</span>
+      </div>
+      <div class="quick-task-grid">${cards}</div>
+    </section>
+  `;
+}
+
+function welcomeConversationHtml(messageKey = "newConversation") {
+  return `
+    <article class="message assistant-message welcome-message">
+      <div class="message-meta"><span class="assistant-avatar" aria-hidden="true">✦</span><strong data-i18n="assistant">${escapeHtml(t("assistant"))}</strong></div>
+      <div class="message-body" data-i18n="${messageKey}">${escapeHtml(t(messageKey))}</div>
+    </article>
+    ${quickTasksHtml()}
+  `;
 }
 
 function normalizeUiAlias(value) {
@@ -1002,7 +1076,41 @@ function renderStoppedResult(track = true) {
 
 function renderEmptyResult(track = true) {
   if (track) state.resultView = { type: "empty" };
+  resultTitleEl.textContent = t("resultTitle");
   setResponseHtml(`<section class="result-state result-empty" data-state="empty"><div class="state-orbit" aria-hidden="true">✦</div><strong>${t("resultEmptyTitle")}</strong><p>${t("resultEmptyBody")}</p></section>`);
+}
+
+function renderPatchNote(track = true) {
+  const patch = getCurrentPatchNote(getLocale());
+  if (track) state.resultView = { type: "patch-note" };
+  resultTitleEl.textContent = t("patchNotesTitle", { version: patch.version });
+  resultRefreshButton.disabled = true;
+  rawOutputEl.textContent = JSON.stringify(patch, null, 2);
+  setResponseHtml(`
+    <article class="patch-note-hero">
+      <div>
+        <span class="patch-version">PATCH ${escapeHtml(patch.version)}</span>
+        <h2>${escapeHtml(patch.title)}</h2>
+        <p>${escapeHtml(patch.summary)}</p>
+      </div>
+      <time datetime="${escapeHtml(patch.publishedAt)}"><span>${t("patchNotesPublished")}</span>${escapeHtml(formatDate(patch.publishedAt))}</time>
+    </article>
+    <section class="patch-note-section" aria-label="${escapeHtml(t("patchNotesHighlights"))}">
+      <div class="patch-note-section-title"><span class="eyebrow">${t("patchNotesHighlights")}</span><strong>${escapeHtml(patch.highlights.length)}</strong></div>
+      <div class="patch-note-grid">
+        ${patch.highlights.map((highlight, index) => `
+          <article class="patch-note-card">
+            <span>${String(index + 1).padStart(2, "0")}</span>
+            <div><strong>${escapeHtml(highlight.title)}</strong><p>${escapeHtml(highlight.body)}</p></div>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+    <footer class="patch-note-source">
+      <div><span>${t("patchNotesSource")}</span><strong>${escapeHtml(patch.sourceName)}</strong></div>
+      <a href="${escapeHtml(patch.sourceUrl)}" target="_blank" rel="noopener noreferrer">${t("patchNotesOfficialLink")} <span aria-hidden="true">↗</span></a>
+    </footer>
+  `);
 }
 
 function renderErrorResult(message, track = true, messageKey = null) {
@@ -1046,6 +1154,7 @@ function rerenderLocalizedState() {
   else if (state.resultView.type === "loading") renderLoadingResult(false);
   else if (state.resultView.type === "error") renderErrorResult(state.resultView.message, false, state.resultView.messageKey);
   else if (state.resultView.type === "stopped") renderStoppedResult(false);
+  else if (state.resultView.type === "patch-note") renderPatchNote(false);
   else renderEmptyResult(false);
   if (state.aliases) renderAliases(state.aliases);
   renderRuntimeStatus(state.runtimeStatus ?? {});
@@ -1152,6 +1261,7 @@ function renderResult(data) {
   state.lastEntityCandidates = data.clarification?.entityCandidates ?? [];
   state.currentResponseId = recordAssistantResponse(data);
   state.resultView = { type: "result", data };
+  resultTitleEl.textContent = t("resultTitle");
   renderCurrentResult(data);
   resultRefreshButton.disabled = false;
 }
@@ -1564,20 +1674,34 @@ function setRequestRunning(running) {
   refreshButton.disabled = running || !state.lastInput;
   resultRefreshButton.disabled = running || !state.lastInput;
   form.querySelector("button[type=submit]").disabled = running;
+  for (const button of resultEl.querySelectorAll("[data-quick-task]")) button.disabled = running;
 }
 
-async function requestRecommendation(refresh = false) {
+async function requestRecommendation(refresh = false, displayInput = null) {
   const input = refresh ? state.lastInput : queryInput.value.trim();
   if (!input) {
     renderError("enterQuery", "enterQuery");
     return;
+  }
+  if (!refresh) {
+    const championPlaceholder = t("quickTaskBuildSelection");
+    const selectionStart = queryInput.value.indexOf(championPlaceholder);
+    if (selectionStart >= 0) {
+      queryInput.setCustomValidity(t("enterChampion"));
+      queryInput.focus();
+      queryInput.setSelectionRange(selectionStart, selectionStart + championPlaceholder.length);
+      queryInput.reportValidity();
+      return;
+    }
+    queryInput.setCustomValidity("");
   }
 
   state.currentController?.abort();
   const requestId = ++state.requestSerial;
   state.progressIndex = 0;
   state.lastInput = input;
-  appendUserMessage(input);
+  state.lastDisplayInput = refresh ? state.lastDisplayInput ?? input : displayInput ?? input;
+  appendUserMessage(state.lastDisplayInput);
   activeResponseEl = appendAssistantMessage();
   const assistantTarget = activeResponseEl;
   if (!refresh) composer.clear();
@@ -1690,6 +1814,10 @@ queryInput.addEventListener("keydown", (event) => {
   }
 });
 
+queryInput.addEventListener("input", () => {
+  if (!queryInput.value.includes(t("quickTaskBuildSelection"))) queryInput.setCustomValidity("");
+});
+
 stopButton.addEventListener("click", () => {
   state.currentController?.abort();
 });
@@ -1701,6 +1829,32 @@ retryButton.addEventListener("click", () => {
 });
 
 async function handleResultClick(event) {
+  const quickTaskButton = event.target.closest("button[data-quick-task]");
+  if (quickTaskButton) {
+    if (state.requestInFlight) return;
+    const quickTask = QUICK_TASKS.find((task) => task.id === quickTaskButton.dataset.quickTask);
+    if (quickTask?.view === "patch-note") {
+      renderPatchNote();
+      resultPane.focus();
+      return;
+    }
+    if (quickTask?.inputTemplateKey) {
+      const template = t(quickTask.inputTemplateKey);
+      const selection = t(quickTask.selectionKey);
+      const selectionStart = template.indexOf(selection);
+      queryInput.value = template;
+      queryInput.focus();
+      if (selectionStart >= 0) {
+        queryInput.setSelectionRange(selectionStart, selectionStart + selection.length);
+      }
+      queryInput.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+    if (!quickTask?.query) return;
+    queryInput.value = quickTask.query;
+    await requestRecommendation(false, t(quickTask.promptKey));
+    return;
+  }
   if (event.target.closest("[data-view-result]")) {
     resultPane.focus();
     return;
@@ -1816,6 +1970,7 @@ clearButton.addEventListener("click", async () => {
   activeResponseEl = null;
   state.conversationId = globalThis.crypto?.randomUUID?.() ?? `conversation-${Date.now()}`;
   state.lastInput = "";
+  state.lastDisplayInput = "";
   state.lastResult = null;
   state.lastResultId = null;
   state.lastSuggestions = [];
@@ -1826,7 +1981,7 @@ clearButton.addEventListener("click", async () => {
   state.feedbackByCard = {};
   state.explanationFeedback = null;
   rawOutputEl.textContent = "";
-  resultEl.innerHTML = `<article class="message assistant-message welcome-message"><div class="message-meta"><span class="assistant-avatar" aria-hidden="true">✦</span><strong>TFTAgent</strong></div><div class="message-body">${t("newConversation")}</div></article>`;
+  resultEl.innerHTML = welcomeConversationHtml();
   renderEmptyResult();
   setRequestRunning(false);
   setStatusKey("statusCleared");

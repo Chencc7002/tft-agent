@@ -10,10 +10,13 @@ const i18n = ui("i18n.js");
 const appShell = ui("app-shell.js");
 const conversation = ui("conversation-pane.js");
 const resultPane = ui("result-pane.js");
+const patchNotes = ui("patch-notes.js");
 const wallpaperController = ui("wallpaper-controller.js");
 const wallpaperCatalog = ui("wallpaper-catalog.js");
 
 test("desktop UI exposes the responsive AppShell structure", () => {
+  assert.match(indexHtml, /<title>tftclarity · Set 17<\/title>/);
+  assert.doesNotMatch(indexHtml, />TFTAgent</);
   assert.match(indexHtml, /id="app-shell"/);
   assert.match(indexHtml, /id="title-bar"/);
   assert.match(indexHtml, /id="conversation-pane"/);
@@ -33,6 +36,34 @@ test("desktop UI exposes the responsive AppShell structure", () => {
   assert.match(resultPane, /class CompRankingResult/);
   assert.match(conversation, /class ConversationPane/);
   assert.match(conversation, /class Composer/);
+});
+
+test("welcome view exposes localized, actionable quick tasks", () => {
+  assert.match(indexHtml, /class="quick-tasks"/);
+  assert.equal((indexHtml.match(/class="quick-task-card/g) ?? []).length, 4);
+  assert.match(indexHtml, /data-quick-task="comp-rankings"/);
+  assert.match(indexHtml, /data-quick-task="comp-trends"/);
+  assert.match(indexHtml, /data-quick-task="patch-notes"/);
+  assert.match(appJs, /const QUICK_TASKS/);
+  assert.match(appJs, /inputTemplateKey: "quickTaskBuildTemplate"/);
+  assert.match(appJs, /queryInput\.setSelectionRange/);
+  assert.match(appJs, /queryInput\.reportValidity/);
+  assert.match(i18n, /enterChampion/);
+  assert.doesNotMatch(i18n, /霞|Xayah/);
+  assert.match(appJs, /quickTasksHtml/);
+  assert.match(appJs, /button\[data-quick-task\]/);
+  assert.match(appJs, /QUICK_TASKS\.find/);
+  assert.match(appJs, /queryInput\.value = quickTask\.query/);
+  assert.match(appJs, /requestRecommendation\(false, t\(quickTask\.promptKey\)\)/);
+  assert.match(appJs, /state\.lastDisplayInput/);
+  assert.match(appJs, /renderPatchNote/);
+  assert.match(patchNotes, /CURRENT_PATCH_VERSION = "17\.7"/);
+  assert.match(patchNotes, /teamfighttactics\.leagueoflegends\.com/);
+  assert.match(styles, /\.patch-note-grid/);
+  assert.match(styles, /\.patch-note-source/);
+  assert.match(styles, /\.quick-task-grid/);
+  assert.match(styles, /\.quick-task-card/);
+  assert.match(styles, /min-height: 54px/);
 });
 
 test("small-window maintenance exposes a separate filterable item catalog audit", () => {

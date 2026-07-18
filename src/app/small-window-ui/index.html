@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>TFTAgent · Set 17</title>
+    <title>tftclarity · Set 17</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -13,12 +13,12 @@
       <canvas class="particle-layer" id="particle-layer" aria-hidden="true"></canvas>
       <header class="topbar" id="title-bar">
         <span class="topbar-starfield" id="topbar-starfield" aria-hidden="true"></span>
-        <div class="brand" aria-label="TFTAgent">
+        <div class="brand" aria-label="tftclarity">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 32 32" role="img"><path d="M16 2.7 19.4 12 29 16l-9.6 4L16 29.3 12.6 20 3 16l9.6-4L16 2.7Z"/><path d="m16 8 1.8 6.2L24 16l-6.2 1.8L16 24l-1.8-6.2L8 16l6.2-1.8L16 8Z"/></svg>
           </span>
           <span class="brand-copy">
-            <strong>TFTAgent</strong>
+            <strong>tftclarity</strong>
             <small>Set 17 · <span data-i18n="seasonName">星神</span></small>
           </span>
         </div>
@@ -55,13 +55,41 @@
           </div>
           <section class="conversation" id="result" aria-live="polite">
             <article class="message assistant-message welcome-message">
-              <div class="message-meta"><span class="assistant-avatar" aria-hidden="true">✦</span><strong>TFTAgent</strong></div>
+              <div class="message-meta"><span class="assistant-avatar" aria-hidden="true">✦</span><strong data-i18n="assistant">tftclarity</strong></div>
               <div class="message-body" data-i18n="welcome">直接问我英雄出装、单件装备或阵容排行。你也可以连续追问。</div>
             </article>
+            <section class="quick-tasks" data-i18n-aria="quickTasksLabel" aria-label="常用任务">
+              <div class="quick-tasks-heading">
+                <strong data-i18n="quickTasksTitle">常用任务</strong>
+                <span data-i18n="quickTasksHint">选择一个入口快速开始</span>
+              </div>
+              <div class="quick-task-grid">
+                <button type="button" class="quick-task-card" data-quick-task="comp-rankings">
+                  <span class="quick-task-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z"/></svg></span>
+                  <span class="quick-task-copy"><strong data-i18n="quickTaskCompsTitle">热门阵容</strong><small data-i18n="quickTaskCompsBody">当前版本上分阵容排行</small></span>
+                  <span class="quick-task-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button type="button" class="quick-task-card" data-quick-task="comp-trends">
+                  <span class="quick-task-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 17 5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg></span>
+                  <span class="quick-task-copy"><strong data-i18n="quickTaskTrendsTitle">阵容趋势</strong><small data-i18n="quickTaskTrendsBody">发现近期上升阵容</small></span>
+                  <span class="quick-task-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button type="button" class="quick-task-card" data-quick-task="unit-build">
+                  <span class="quick-task-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 18 8-8"/><path d="m12 6 6-2-2 6-8 8-4 2 2-4z"/></svg></span>
+                  <span class="quick-task-copy"><strong data-i18n="quickTaskBuildTitle">英雄出装</strong><small data-i18n="quickTaskBuildBody">指定英雄后查询三件套</small></span>
+                  <span class="quick-task-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button type="button" class="quick-task-card" data-quick-task="patch-notes">
+                  <span class="quick-task-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 5h12v14H6z"/><path d="M9 9h6M9 12h6M9 15h4"/></svg></span>
+                  <span class="quick-task-copy"><strong data-i18n="quickTaskUpdatesTitle">更新公告</strong><small data-i18n="quickTaskUpdatesBody">17.7 版本要点与改动</small></span>
+                  <span class="quick-task-arrow" aria-hidden="true">↗</span>
+                </button>
+              </div>
+            </section>
           </section>
 
           <form class="query-panel composer" id="query-form">
-            <textarea id="query-input" name="query" rows="1" autocomplete="off" spellcheck="false" data-i18n-placeholder="composerPlaceholder" placeholder="问问霞的装备，Enter 发送…"></textarea>
+            <textarea id="query-input" name="query" rows="1" autocomplete="off" spellcheck="false" data-i18n-placeholder="composerPlaceholder" placeholder="输入英雄、装备或阵容问题，Enter 发送…"></textarea>
             <div class="action-row composer-actions">
               <button type="button" id="retry-button" class="compact-action" data-i18n-title="retryTitle" title="重试上一条" disabled><span aria-hidden="true">↻</span><span data-i18n="retry">重试</span></button>
               <button type="button" id="stop-button" class="compact-action hidden" data-i18n-title="stopTitle" title="停止查询"><span aria-hidden="true">■</span><span data-i18n="stop">停止</span></button>
