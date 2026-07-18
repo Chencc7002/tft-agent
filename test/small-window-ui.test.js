@@ -66,6 +66,18 @@ test("welcome view exposes localized, actionable quick tasks", () => {
   assert.match(styles, /min-height: 54px/);
 });
 
+test("public UI exposes a visible, localized Riot fan-project notice", () => {
+  assert.match(indexHtml, /class="site-legal-footer"/);
+  assert.match(indexHtml, /class="settings-section legal-notice"/);
+  assert.match(indexHtml, /tftclarity isn't endorsed by Riot Games/);
+  assert.match(indexHtml, /https:\/\/www\.riotgames\.com\/en\/legal/);
+  assert.match(indexHtml, /https:\/\/developer\.riotgames\.com\/policies\/general/);
+  assert.match(i18n, /legalNoticeSummary/);
+  assert.match(i18n, /legalFooterSummary/);
+  assert.match(styles, /\.site-legal-footer/);
+  assert.match(styles, /\.legal-notice/);
+});
+
 test("small-window maintenance exposes a separate filterable item catalog audit", () => {
   assert.match(indexHtml, /id="open-item-audit-button"/);
   assert.match(indexHtml, /id="item-audit-panel"/);
