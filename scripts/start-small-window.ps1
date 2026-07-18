@@ -106,7 +106,7 @@ function Get-ListeningPid {
 
 function Set-TopMostWindow {
   param(
-    [string]$TitlePattern = "TFTAgent",
+    [string]$TitlePattern = "tftclarity",
     [int]$Left = 40,
     [int]$Top = 40,
     [int]$TargetWidth = 1200,
@@ -204,7 +204,7 @@ while ((Get-Date) -lt $deadline) {
 }
 
 if (-not (Test-Health $HealthUrl)) {
-  throw "TFTAgent small window server did not become healthy at $HealthUrl"
+  throw "tftclarity small window server did not become healthy at $HealthUrl"
 }
 
 $browserProcess = $null
@@ -224,7 +224,7 @@ if (-not $NoBrowser) {
 
   if ($TopMost) {
     $topMostResult = Set-TopMostWindow `
-      -TitlePattern "TFTAgent" `
+      -TitlePattern "tftclarity" `
       -Left $WindowLeft `
       -Top $WindowTop `
       -TargetWidth $Width `
@@ -234,7 +234,7 @@ if (-not $NoBrowser) {
 
   if (-not $NoHotkey -and $Hotkey) {
     $powershell = Join-Path $PSHOME "powershell.exe"
-    $hotkeyArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$HotkeyScript`" -TitlePattern `"TFTAgent`" -Hotkey `"$Hotkey`""
+    $hotkeyArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$HotkeyScript`" -TitlePattern `"tftclarity`" -Hotkey `"$Hotkey`""
     Start-DetachedProcess `
       -FileName $powershell `
       -Arguments $hotkeyArgs `

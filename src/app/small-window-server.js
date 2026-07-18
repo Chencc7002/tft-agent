@@ -2779,7 +2779,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   loadLocalEnvironment();
   startSmallWindowServer(parseCliOptions(process.argv.slice(2)))
     .then(({ url }) => {
-      console.log(`TFTAgent small window: ${url}`);
+      console.log(`tftclarity small window: ${url}`);
     })
     .catch((error) => {
       console.error(error);

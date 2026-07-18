@@ -1,5 +1,5 @@
 param(
-  [string]$TitlePattern = "TFTAgent",
+  [string]$TitlePattern = "tftclarity",
   [string]$Hotkey = "Ctrl+Shift+Space",
   [string]$MutexName = "Local\TFTAgentSmallWindowHotkey",
   [ValidateRange(0, 60)]
