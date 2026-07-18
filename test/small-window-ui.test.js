@@ -16,6 +16,8 @@ const wallpaperCatalog = ui("wallpaper-catalog.js");
 
 test("desktop UI exposes the responsive AppShell structure", () => {
   assert.match(indexHtml, /<title>tftclarity · Set 17<\/title>/);
+  assert.match(indexHtml, /<link rel="icon" type="image\/png" href="\/favicon\.png">/);
+  assert.ok(statSync(new URL("../src/app/small-window-ui/favicon.png", import.meta.url)).size > 0);
   assert.doesNotMatch(indexHtml, />TFTAgent</);
   assert.match(indexHtml, /id="app-shell"/);
   assert.match(indexHtml, /id="title-bar"/);
