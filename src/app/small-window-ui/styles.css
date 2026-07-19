@@ -102,9 +102,16 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
   background:
     radial-gradient(circle at 8% 30%, rgba(255,255,255,.78) 0 1px, transparent 1.7px),
     radial-gradient(circle at 31% 68%, rgba(255,255,255,.42) 0 1px, transparent 1.4px),
-    linear-gradient(115deg, #2da6bf 0%, #3b9ed5 35%, #5e79d9 70%, #745cb6 100%);
+    linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--wallpaper-accent) 68%, #173c5a) 0%,
+      color-mix(in srgb, var(--wallpaper-accent) 58%, var(--wallpaper-accent-secondary)) 46%,
+      color-mix(in srgb, var(--wallpaper-accent-secondary) 68%, #342652) 100%
+    );
   background-size: 97px 72px, 139px 86px, auto;
-  box-shadow: inset 0 -1px rgba(255,255,255,.22), 0 4px 16px rgba(35, 70, 130, .18);
+  box-shadow:
+    inset 0 -1px rgba(255,255,255,.22),
+    0 4px 16px color-mix(in srgb, var(--wallpaper-accent-secondary) 22%, transparent);
 }
 .topbar > :not(.topbar-starfield) { position: relative; z-index: 2; }
 .topbar-starfield {
@@ -128,7 +135,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .topbar-starfield::before {
   background-image:
     radial-gradient(circle, rgba(255,255,255,.95) 0 1px, rgba(214,244,255,.5) 1.5px, transparent 2.6px),
-    radial-gradient(circle, rgba(222,211,255,.84) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle, color-mix(in srgb, var(--wallpaper-accent-secondary) 38%, white) 0 1.2px, transparent 2.4px),
     radial-gradient(circle, rgba(255,232,168,.72) 0 .8px, transparent 2px);
   background-position: 0 7px, 31px 2px, 17px 23px;
   background-size: 83px 43px, 137px 59px, 109px 47px;
@@ -138,7 +145,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .topbar-starfield::after {
   background-image:
     radial-gradient(ellipse at center, rgba(255,255,255,.92) 0 .7px, transparent 1.8px),
-    radial-gradient(ellipse at center, rgba(194,238,255,.78) 0 1px, transparent 2.2px);
+    radial-gradient(ellipse at center, color-mix(in srgb, var(--wallpaper-accent) 34%, white) 0 1px, transparent 2.2px);
   background-position: 12px 4px, 58px 18px;
   background-size: 61px 31px, 151px 53px;
   filter: drop-shadow(0 0 4px rgba(255,255,255,.8));
@@ -249,7 +256,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 }
 .shell.settings-open .workspace { grid-template-columns: clamp(320px, var(--conversation-width), 520px) minmax(360px, 1fr) var(--settings-width); }
 .conversation-pane, .result-pane, .settings-panel { min-width: 0; min-height: 0; background: rgba(255,255,255,.91); }
-.conversation-pane { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.conversation-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-right: 1px solid color-mix(in srgb, var(--wallpaper-accent) 18%, transparent);
+}
 .result-pane { display: grid; grid-template-rows: auto minmax(0, 1fr); background: rgba(248,249,252,.86); }
 
 .pane-heading { min-width: 0; min-height: 54px; padding: 8px 16px 7px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.76); }
@@ -299,8 +310,32 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .composer-actions button { min-height: 31px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid transparent; border-radius: 8px; color: var(--muted); background: transparent; font-size: 11px; }
 .composer-actions button:hover:not(:disabled) { color: var(--star-cyan-dark); background: var(--star-cyan-soft); }
-.composer-actions .send-button { margin-left: auto; min-width: 74px; color: #fff; border-color: var(--star-cyan); background: linear-gradient(135deg, var(--star-cyan), var(--star-indigo)); font-weight: 750; box-shadow: 0 5px 14px rgba(62,174,235,.23); }
-.composer-actions .send-button:hover:not(:disabled) { color: #fff; filter: brightness(.96); }
+.composer-actions .send-button {
+  margin-left: auto;
+  min-width: 74px;
+  color: #fff;
+  border-color: color-mix(in srgb, var(--wallpaper-accent) 82%, white);
+  background: linear-gradient(135deg, var(--wallpaper-accent), var(--wallpaper-accent-secondary));
+  font-weight: 750;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--wallpaper-accent) 30%, transparent);
+  transition: background .32s ease, border-color .32s ease, box-shadow .2s ease, filter .18s ease, transform .18s ease;
+}
+.composer-actions .send-button:hover:not(:disabled) {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--wallpaper-accent) 92%, white),
+    color-mix(in srgb, var(--wallpaper-accent-secondary) 92%, white)
+  );
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--wallpaper-accent) 36%, transparent);
+}
+.composer-actions .send-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 3px 9px color-mix(in srgb, var(--wallpaper-accent) 24%, transparent);
+}
+.composer-actions .send-button:focus-visible {
+  outline-color: color-mix(in srgb, var(--wallpaper-accent) 72%, white);
+}
 
 .result-scroll { padding: 20px clamp(16px, 2.2vw, 30px) 28px; }
 .result-navigation { position: sticky; z-index: 8; top: -12px; margin: -8px 0 12px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #bddfeb; border-radius: 11px; background: rgba(245,252,255,.96); box-shadow: 0 7px 20px rgba(43,111,151,.12); backdrop-filter: blur(8px); }
@@ -733,7 +768,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
   .top-actions { gap: 5px; }.status { max-width: 84px; padding: 0 7px; }.language-toggle button { min-width: 40px; padding: 0 6px; }
   .wallpaper-toggle { min-width: 66px; padding-inline: 6px; }
   .workspace, .shell.settings-open .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(230px, 46%) minmax(0, 54%); }
-  .conversation-pane { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line-strong); }
+  .conversation-pane {
+    grid-row: 1;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--wallpaper-accent) 18%, transparent);
+  }
   .result-pane { grid-row: 2; }
   .conversation-heading, .result-heading { min-height: 48px; padding: 8px 13px; }
   .pane-heading h1 { font-size: 14px; }.eyebrow { font-size: 8px; }.pane-hint { display: none; }

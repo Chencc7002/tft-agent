@@ -67,6 +67,9 @@ test("welcome view exposes localized, actionable quick tasks", () => {
   assert.match(styles, /\.quick-task-card/);
   assert.match(styles, /min-height: 54px/);
   assert.match(styles, /var\(--wallpaper-accent\)/);
+  assert.match(styles, /\.composer-actions \.send-button[\s\S]*var\(--wallpaper-accent\)[\s\S]*var\(--wallpaper-accent-secondary\)/);
+  assert.match(styles, /\.conversation-pane[\s\S]*border-right: 1px solid color-mix\(in srgb, var\(--wallpaper-accent\) 18%, transparent\)/);
+  assert.match(styles, /\.topbar[\s\S]*color-mix\(in srgb, var\(--wallpaper-accent\)[\s\S]*var\(--wallpaper-accent-secondary\)/);
   assert.match(wallpaperCatalog, /accentSecondary/);
   assert.match(wallpaperController, /--wallpaper-accent-secondary/);
 });
