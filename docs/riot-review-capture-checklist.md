@@ -5,11 +5,11 @@
 
 ## 1. 拍摄前必须完成
 
-- [ ] 已将本次代码部署到 `https://tftclarity.cn/`。
-- [ ] `https://tftclarity.cn/privacy` 返回 200，并显示 Privacy Policy。
-- [ ] `https://tftclarity.cn/terms` 返回 200，并显示 Terms of Service。
-- [ ] 首页底部始终能看到独立项目声明以及 Privacy、Terms 链接。
-- [ ] 设置面板中能看到完整 Riot 英文声明。
+- [x] 已将本次代码部署到 `https://tftclarity.cn/`。
+- [x] `https://tftclarity.cn/privacy` 返回 200，并显示 Privacy Policy。
+- [x] `https://tftclarity.cn/terms` 返回 200，并显示 Terms of Service。
+- [x] 首页底部始终能看到独立项目声明以及 Privacy、Terms 链接。
+- [x] 设置面板中能看到完整 Riot 英文声明。
 - [ ] `longyuyanchen@gmail.com` 已配置并实际完成一次收信测试。
 - [ ] 使用无痕窗口重新检查所有页面，避免截图中出现管理入口、调试数据或旧缓存。
 - [ ] 关闭浏览器收藏栏、下载栏、开发者工具和无关标签页。
