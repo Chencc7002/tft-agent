@@ -22,6 +22,9 @@ function sourceMetadata(result, evidence) {
   const source = result?.source ?? {};
   const query = result?.query ?? {};
   return {
+    seasonContextId: query.seasonContextId ?? evidence?.dataStatus?.seasonContextId ?? "set17-live",
+    providerVersion: query.providerVersion ?? evidence?.dataStatus?.providerVersion ?? null,
+    effectivePatch: query.effectivePatch ?? source.patch ?? query.patch ?? evidence?.dataStatus?.patch ?? null,
     provider: clipped(source.provider ?? evidence?.dataStatus?.provider ?? "MetaTFT", 60),
     patch: source.patch ?? query.patch ?? evidence?.dataStatus?.patch ?? null,
     cluster: source.cluster ?? source.clusterId ?? result?.clusterId ?? null,
@@ -62,6 +65,7 @@ function normalizeSemantic(record, index) {
     source,
     patch: record?.patch ?? record?.metadata?.patch ?? null,
     locale: record?.locale ?? record?.metadata?.locale ?? null,
+    seasonContextId: record?.seasonContextId ?? record?.season_context_id ?? record?.metadata?.seasonContextId ?? "set17-live",
     visible: Boolean(record?.visible ?? record?.metadata?.visible ?? true),
     metadata: {
       ...(record?.apiName ? { apiName: clipped(record.apiName, 160) } : {}),
@@ -177,18 +181,32 @@ export class EvidenceAssembler {
     const pack = createEvidencePack({
       request: {
         ...legacy.request,
+        seasonContextId: metadata.seasonContextId,
         entities: legacy.query?.unit?.apiName ? [legacy.query.unit.apiName] : []
       },
-      query: legacy.query,
+      query: {
+        ...legacy.query,
+        seasonContextId: metadata.seasonContextId,
+        providerVersion: metadata.providerVersion,
+        effectivePatch: metadata.effectivePatch
+      },
       structuredEvidence,
       semanticEvidence: [],
       derivedSignals: derivedSignals(legacy),
       warnings: legacy.warnings,
       dataStatus: {
         ...legacy.dataStatus,
+        seasonContextId: metadata.seasonContextId,
+        providerVersion: metadata.providerVersion,
+        effectivePatch: metadata.effectivePatch,
         patch: metadata.patch,
         cluster: metadata.cluster,
-        filters: metadata.filters
+        filters: metadata.filters,
+        enrichmentSources: result?.enrichment ? {
+          facts: "metatft",
+          strategy: "tftclarity_automatic_derivation",
+          profile: "tftclarity_profile"
+        } : null
       },
       generationRules: {
         ...legacy.generationRules,

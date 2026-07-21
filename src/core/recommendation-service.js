@@ -40,6 +40,7 @@ import {
 import { retrieveEntityCandidates } from "../llm/entity-candidate-retriever.js";
 import { buildCompRankingQuery, isCompRankingFollowUp } from "./comp-query.js";
 import { buildCompRankings } from "./comp-ranking-service.js";
+import { applyCompPreferenceSearch } from "./comp-preference-search.js";
 import { enrichCompResponseWithTrendHistory } from "./comp-trend-history.js";
 import { decorateCompAssets } from "../data/asset-resolver.js";
 import { createIntentEnvelope } from "../retrieval/contracts.js";
@@ -208,6 +209,17 @@ function sessionKeyFor(options = {}) {
   return String(options.sessionKey ?? SESSION_LAST_QUERY_KEY);
 }
 
+function seasonContextIdFor(options = {}) {
+  return String(options.seasonContextId ?? options.preferences?.seasonContextId ?? "set17-live");
+}
+
+function storeOptionsFor(options = {}, extra = {}) {
+  return {
+    ...extra,
+    seasonContextId: seasonContextIdFor(options)
+  };
+}
+
 async function getStoreEntry(store, method, ...args) {
   if (!store?.[method]) return null;
   return store[method](...args);
@@ -229,6 +241,11 @@ function inheritCompRankingFromSession(parsed, sessionValue, options = {}) {
   }
 
   const next = { ...parsed, intent: isCompIntent(parsed?.intent) ? parsed.intent : previousQuery.intent };
+  const continuationWording = /^(?:那|再|继续|换成|改成|如果|然后)|(?:呢|再看|换成|改成)/u
+    .test(String(parsed?.rawInput ?? "").trim());
+  const explicitFreshCompRequest = isCompIntent(parsed?.intent)
+    && !parsed?.preferenceRequested
+    && !continuationWording;
   const inheritedKeys = [];
   for (const key of ["rankFilter", "days", "patch", "queue", "minSamples", "sort", "metrics", "limit", "specialMode"]) {
     const current = next[key];
@@ -236,6 +253,21 @@ function inheritCompRankingFromSession(parsed, sessionValue, options = {}) {
     if (!missing || previousQuery[key] === undefined || Object.hasOwn(options.explicitPreferences ?? {}, key)) continue;
     next[key] = Array.isArray(previousQuery[key]) ? [...previousQuery[key]] : previousQuery[key];
     inheritedKeys.push(key);
+  }
+  if (previousQuery.preferenceRequested && !explicitFreshCompRequest) {
+    const current = next.preferenceConditions ?? {};
+    const previous = previousQuery.preferenceConditions ?? {};
+    const merged = { ...current };
+    for (const key of ["strategy", "reroll", "goal", "contested", "difficulty", "beginnerFriendly", "count"]) {
+      const missing = merged[key] === undefined || merged[key] === null;
+      if (!missing || previous[key] === undefined || previous[key] === null) continue;
+      if (key === "strategy" && current.reroll === false && previous[key] === "reroll") continue;
+      if (key === "reroll" && current.strategy === "reroll" && previous[key] === false) continue;
+      merged[key] = previous[key];
+      inheritedKeys.push(`preferenceConditions.${key}`);
+    }
+    next.preferenceRequested = true;
+    next.preferenceConditions = merged;
   }
   if (parsed.sort === "win_first") next.metrics = ["win_rate"];
   if (parsed.sort === "top4_first") next.metrics = ["top4_rate"];
@@ -274,6 +306,7 @@ async function applySemanticIntentHint(input, parsed, options = {}) {
   if (!options.semanticRetriever?.search || !needsSemanticIntent) return parsed;
   try {
     const hits = await options.semanticRetriever.search(input, {
+      seasonContextId: seasonContextIdFor(options),
       documentTypes: ["intent_sample"],
       patch: options.preferences?.patch ?? "current",
       locale: options.semanticLocale ?? "zh-CN",
@@ -354,6 +387,7 @@ async function applySemanticEntityHints(input, parsed, options = {}, catalog) {
   if (!options.semanticRetriever?.search || !needsEntitySearch) return parsed;
   try {
     const hits = await options.semanticRetriever.search(input, {
+      seasonContextId: seasonContextIdFor(options),
       documentTypes: ["unit", "item", "trait", "unit_description", "item_description", "trait_description", "emblem_description"],
       patch: options.preferences?.patch ?? "current",
       locale: options.semanticLocale ?? "zh-CN",
@@ -577,6 +611,42 @@ function mergeStructuredParserResult(parsed, structured, reparsed) {
   }
   applyArray("metrics", structured.constraints.metrics);
   applyScalar("limit", structured.constraints.limit);
+
+  const structuredPreferences = {
+    strategy: structured.constraints.strategy,
+    reroll: structured.constraints.reroll,
+    goal: structured.constraints.goal,
+    contested: structured.constraints.contested,
+    difficulty: structured.constraints.difficulty,
+    beginnerFriendly: structured.constraints.beginnerFriendly,
+    count: structured.constraints.count
+  };
+  const hasStructuredPreferences = Object.values(structuredPreferences)
+    .some((value) => value !== undefined);
+  if (hasStructuredPreferences && structured.intent === "comp_rankings") {
+    const existing = parsed.preferenceRequested ? parsed.preferenceConditions ?? {} : {};
+    const rejected = [];
+    const merged = {};
+    for (const key of ["strategy", "reroll", "goal", "contested", "difficulty", "beginnerFriendly", "count"]) {
+      const current = existing[key];
+      const proposed = structuredPreferences[key];
+      merged[key] = current !== undefined && current !== null ? current : proposed ?? null;
+    }
+    if (existing.reroll === false && merged.strategy === "reroll") {
+      merged.strategy = null;
+      rejected.push("strategy");
+    }
+    if (existing.strategy === "reroll" && merged.reroll === false) {
+      merged.reroll = true;
+      rejected.push("reroll");
+    }
+    merged.count = Number.isInteger(merged.count) ? merged.count : 3;
+    next.preferenceRequested = true;
+    next.preferenceConditions = merged;
+    next.intent = "comp_rankings";
+    next.parser.structuredParser.rejectedCompConstraints = rejected;
+    applied.push("preferenceConditions");
+  }
 
   return next;
 }
@@ -989,6 +1059,9 @@ function canPreinheritUnitFollowUp(parsed) {
 
 function serializeQueryForSession(query) {
   return {
+    seasonContextId: query.seasonContextId ?? "set17-live",
+    providerVersion: query.providerVersion ?? null,
+    effectivePatch: query.effectivePatch ?? query.patch ?? null,
     intent: query.intent,
     unit: query.unit,
     starLevel: query.starLevel,
@@ -1054,6 +1127,9 @@ async function resolveCompConstraint(query, parsed, options, catalog) {
   const plan = planMetaTFTCompCandidates(query);
   const cacheStore = options.cacheStore ?? null;
   const cacheKey = makeCompCandidateCacheKey({
+    seasonContextId: query.seasonContextId,
+    providerVersion: query.providerVersion,
+    effectivePatch: query.effectivePatch,
     unit: query.unit,
     days: query.days,
     rankFilter: query.rankFilter,
@@ -1067,7 +1143,7 @@ async function resolveCompConstraint(query, parsed, options, catalog) {
   const warnings = [];
 
   if (response === undefined && !options.bypassDefaultContextCache) {
-    const cached = await getStoreEntry(cacheStore, "getDefaultContext", cacheKey);
+    const cached = await getStoreEntry(cacheStore, "getDefaultContext", cacheKey, storeOptionsFor(options));
     if (cached?.value?.response !== undefined) {
       response = cached.value.response;
       cache = {
@@ -1107,11 +1183,11 @@ async function resolveCompConstraint(query, parsed, options, catalog) {
         response,
         source: "metatft",
         semanticsVersion: COMP_FILTER_SEMANTICS_VERSION
-      }, { ttlMs: options.defaultContextTtlMs });
+      }, storeOptionsFor(options, { ttlMs: options.defaultContextTtlMs }));
       cache.updatedAt = stored?.updatedAt ?? response?.capture?.capturedAt ?? new Date().toISOString();
       cache.expiresAt = stored?.expiresAt ?? null;
     } catch (error) {
-      const stale = await getStoreEntry(cacheStore, "getDefaultContext", cacheKey, { allowExpired: true });
+      const stale = await getStoreEntry(cacheStore, "getDefaultContext", cacheKey, storeOptionsFor(options, { allowExpired: true }));
       if (stale?.value?.response !== undefined) {
         response = stale.value.response;
         cache = {
@@ -1202,7 +1278,7 @@ async function writeLastQuerySession(result, options) {
     lastResultIds: serializeResultIds(result.rankedBuilds),
     updatedAt: new Date().toISOString()
   }, {
-    ttlMs: options.sessionTtlMs
+    ...storeOptionsFor(options, { ttlMs: options.sessionTtlMs })
   });
 }
 
@@ -1337,7 +1413,7 @@ export async function recommendForInput(input, options = {}) {
   const cacheStore = options.cacheStore ?? null;
   const initialSessionEntry = options.useSession === false
     ? null
-    : await getStoreEntry(sessionStoreFor(options), "getSessionState", sessionKeyFor(options));
+    : await getStoreEntry(sessionStoreFor(options), "getSessionState", sessionKeyFor(options), storeOptionsFor(options));
   let deterministicParsed = parseQueryDeterministically(input, options, catalog);
   deterministicParsed = await applySemanticIntentHint(input, deterministicParsed, options);
   deterministicParsed = await applySemanticEntityHints(input, deterministicParsed, options, catalog);
@@ -1382,6 +1458,16 @@ export async function recommendForInput(input, options = {}) {
       ["rankFilter", "days", "patch", "queue", "minSamples", "sort", "metrics", "limit"]
         .map((key) => [key, compConstraintSource(parsedInput, options, key)])
     );
+    if (query.preferenceRequested) {
+      query.preferenceConditionSources = Object.fromEntries(
+        Object.keys(query.preferenceConditions ?? {}).map((key) => [
+          key,
+          parsedInput.sessionContext?.inheritedKeys?.includes(`preferenceConditions.${key}`)
+            ? "conversation"
+            : "current_input"
+        ])
+      );
+    }
     const retrievalAudit = createRetrievalAudit({
       parsed: parsedInput,
       query,
@@ -1397,7 +1483,7 @@ export async function recommendForInput(input, options = {}) {
     const warnings = [];
 
     if (response === undefined && !options.bypassQueryCache) {
-      const cached = await getStoreEntry(cacheStore, "getQuery", queryCacheKey);
+      const cached = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, storeOptionsFor(options));
       if (cached?.value?.response !== undefined) {
         response = cached.value.response;
         queryCache = {
@@ -1495,7 +1581,7 @@ export async function recommendForInput(input, options = {}) {
             response,
             source: "metatft",
             patch: query.patch
-          }, { ttlMs: options.queryTtlMs });
+          }, storeOptionsFor(options, { ttlMs: options.queryTtlMs }));
           queryCache = {
             ...queryCache,
             updatedAt: stored?.updatedAt ?? new Date().toISOString(),
@@ -1503,7 +1589,7 @@ export async function recommendForInput(input, options = {}) {
           };
         }
       } catch (error) {
-        const stale = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, { allowExpired: true });
+        const stale = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, storeOptionsFor(options, { allowExpired: true }));
         if (stale?.value?.response === undefined) throw error;
         response = stale.value.response;
         queryCache = {
@@ -1523,7 +1609,19 @@ export async function recommendForInput(input, options = {}) {
       catalog,
       warnings
     });
-    const decorated = decorateCompAssets(result, {
+    const enriched = options.compEnrichmentService
+      ? await options.compEnrichmentService.enrichRankingResult(result, {
+        seasonContextId: query.seasonContextId,
+        provider: options.provider ?? "metatft-live"
+      })
+      : result;
+    const searched = query.preferenceRequested
+      ? applyCompPreferenceSearch(enriched, {
+        conditions: query.preferenceConditions,
+        minSamples: query.minSamples
+      })
+      : enriched;
+    const decorated = decorateCompAssets(searched, {
       resolver: options.assetResolver,
       catalog
     });
@@ -1537,7 +1635,7 @@ export async function recommendForInput(input, options = {}) {
           .slice(0, 10)
           .map((comp) => comp.compId),
         updatedAt: new Date().toISOString()
-      }, { ttlMs: options.sessionTtlMs });
+      }, storeOptionsFor(options, { ttlMs: options.sessionTtlMs }));
     decorated.cache = {
       query: queryCache,
       session: {
@@ -1547,7 +1645,7 @@ export async function recommendForInput(input, options = {}) {
         writtenAt: sessionWrite?.updatedAt ?? null
       }
     };
-    decorated.text = "";
+    decorated.text = decorated.text ?? "";
     attachRetrievalAudit(decorated, input, catalog, retrievalAudit);
     return decorated;
   }
@@ -1742,7 +1840,7 @@ export async function recommendForInput(input, options = {}) {
   const additionalWarnings = [];
 
   if (response === undefined && !options.bypassQueryCache) {
-    const cached = await getStoreEntry(cacheStore, "getQuery", queryCacheKey);
+    const cached = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, storeOptionsFor(options));
     if (cached?.value?.response !== undefined) {
       response = cached.value.response;
       queryCache = {
@@ -1789,9 +1887,9 @@ export async function recommendForInput(input, options = {}) {
           response,
           source: "metatft",
           patch: validatedQuery.patch
-        }, {
+        }, storeOptionsFor(options, {
           ttlMs: options.queryTtlMs
-        });
+        }));
         queryCache = {
           ...queryCache,
           updatedAt: stored?.updatedAt
@@ -1802,9 +1900,9 @@ export async function recommendForInput(input, options = {}) {
         };
       }
     } catch (error) {
-      const stale = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, {
+      const stale = await getStoreEntry(cacheStore, "getQuery", queryCacheKey, storeOptionsFor(options, {
         allowExpired: true
-      });
+      }));
       if (stale?.value?.response === undefined) throw error;
 
       response = stale.value.response;

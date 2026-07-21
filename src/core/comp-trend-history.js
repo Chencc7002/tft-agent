@@ -27,6 +27,9 @@ function nowMs(options, cacheStore) {
 
 export function makeCompTrendHistoryKey(query = {}) {
   const scope = {
+    seasonContextId: String(query.seasonContextId ?? "set17-live"),
+    providerVersion: query.providerVersion ?? null,
+    effectivePatch: String(query.effectivePatch ?? query.patch ?? "current"),
     queue: String(query.queue ?? "1100"),
     patch: String(query.patch ?? "current"),
     days: Number(query.days ?? 3),
@@ -83,6 +86,9 @@ export async function enrichCompResponseWithTrendHistory(response, options = {})
   const currentTime = nowMs(options, cacheStore);
   const capturedAt = new Date(currentTime).toISOString();
   const key = makeCompTrendHistoryKey(options.query);
+  const storeOptions = {
+    seasonContextId: options.query?.seasonContextId ?? options.seasonContextId ?? "set17-live"
+  };
   const canPersist = typeof cacheStore?.getCompTrendHistory === "function"
     && typeof cacheStore?.setCompTrendHistory === "function";
   const officialGate = cloned.officialTrendGate
@@ -103,7 +109,7 @@ export async function enrichCompResponseWithTrendHistory(response, options = {})
     return cloned;
   }
 
-  const stored = await cacheStore.getCompTrendHistory(key);
+  const stored = await cacheStore.getCompTrendHistory(key, storeOptions);
   const history = stored?.value && typeof stored.value === "object"
     ? stored.value
     : { version: 1, snapshots: [] };
@@ -146,7 +152,7 @@ export async function enrichCompResponseWithTrendHistory(response, options = {})
     version: 1,
     scopeKey: key,
     snapshots
-  });
+  }, storeOptions);
 
   const first = snapshots
     .filter((snapshot) => snapshot.clusterId === current.clusterId)

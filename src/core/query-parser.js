@@ -462,6 +462,9 @@ export function parseQuery(input, options = {}) {
   const compQuery = intent === "comp_rankings" || intent === "comp_trends"
     ? parseCompRankingQuery(input, { ...(options.compQuery ?? {}), intent })
     : null;
+  const effectiveUnresolvedEntityHints = intent === "comp_rankings" || intent === "comp_trends"
+    ? unresolvedEntityHints.filter((hint) => !/^(?:阵容|体系)$/u.test(normalizeAlias(hint.inputFragment)))
+    : unresolvedEntityHints;
 
   return {
     rawInput: String(input ?? ""),
@@ -491,6 +494,8 @@ export function parseQuery(input, options = {}) {
     popularRequested: compQuery?.popularRequested,
     specialMode: compQuery?.specialMode,
     trendRequested: compQuery?.trendRequested,
+    preferenceRequested: compQuery?.preferenceRequested,
+    preferenceConditions: compQuery?.preferenceConditions,
     parser: {
       usedLLM: false,
       intentExplicit: hasExplicitIntent(input, comparison, ownedItems, itemCategories),
@@ -509,7 +514,7 @@ export function parseQuery(input, options = {}) {
         requested: hasExclusionIntent(input),
         itemApiNames: excludedItems
       },
-      unresolvedEntityHints,
+      unresolvedEntityHints: effectiveUnresolvedEntityHints,
       entityAmbiguities: entities.ambiguities,
       highConfidenceEntityResolutions: highConfidenceEntityResolutions.map((resolution) => ({
         entityType: resolution.entityType,

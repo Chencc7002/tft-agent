@@ -327,6 +327,19 @@ availabilityPolicy=item-availability-overrides-only
 - 最新离线结果：`npm test` 194/194，`smoke:small-window` 通过（热缓存 2ms、本地重开 4ms），`smoke:comps`、`audit:items`、`audit:item-patch`、`audit:aliases` 通过。
 - 实际视觉检查：460px/360px 均无横向溢出；完整三件套、单装备榜、澄清、低样本、错误、stale、长会话截图保存在 `.cache/visual-smoke/`。裸 `smoke:visual` 因 Playwright 未安装而跳过。
 
+## 2026-07-22 阶段 4：自然语言阵容条件检索
+
+- 开发前后均完成真实 LLM 硬门槛验证。当前使用 `gemini-3.6-flash`；阶段 4 复验输入为“推荐3套不卷、适合新手的95阵容”，模型实际返回 `intent=comp_rankings`、`strategy=fast9`、`contested=low`、`beginnerFriendly=true`、`count=3`。验证失败时直接失败，不使用规则解析或其他模型绕过。
+- 新增严格版本化条件协议 `comp-preference-conditions-v1`：`strategy`、`reroll`、`goal`、`contested`、`difficulty`、`beginnerFriendly`、`count`。未知字段、非法枚举、非法数量及 `strategy=reroll` 与 `reroll=false` 的矛盾组合会被拒绝。
+- 规则解析与受控 LLM 都只能补充条件。LLM 输出不能携带阵容 ID、排名、分数或决策；本次输入中的确定性条件优先，LLM 不得覆盖显式数量或放宽条件。
+- 新增 `comp-preference-search-v1` 确定性执行器：从完整 MetaTFT 页面候选池过滤，应用 strategy/reroll、人工 Profile、同行证据和样本门槛，并按 top4/top1/balanced 目标进行可靠性收缩排序，最后严格按 `count` 截断。
+- `top4` 以收缩后的前四率为主，`top1` 以收缩后的吃鸡率为主，`balanced` 综合前四率、吃鸡率、平均名次和样本可靠性；低同行结合 MetaTFT 选择率与 Profile `contestTolerance`。难度和新手条件只读取已验证 Profile，缺失时不推测。
+- 结果明确区分 `ok`、`low_sample_only`、`insufficient_profile`、`insufficient_evidence`、`zero_results`。低样本只进入参考区，不进入正式推荐；缺 Profile、缺指标和零结果均返回可见 warning。显式 `null` 的 Profile/统计字段保持为缺失证据，不会被数值转换为 0；低样本且缺目标指标的记录也不会伪装成低样本证据。
+- 小窗 HTTP 响应暴露条件协议、执行状态、真实返回数量和 `performedBy=deterministic_code`，但不泄漏内部完整候选池或 MetaTFT 原始行。UI 新增自然语言条件摘要和证据状态。
+- `scripts/smoke-llm.mjs` 支持 `SMOKE_LLM_EXPECT_PREFERENCES`，会对真实模型响应逐字段断言，不能只凭接口 200 或 intent 正确判定通过。
+- 阶段 4 定向测试覆盖基础映射、组合条件、协议拒绝、确定性过滤/排序/数量、缺 Profile、显式空值、低样本、真零结果、LLM 越权拒绝、服务端端到端与 HTTP 序列化。发布前 review 还补齐了：管理写接口服务端鉴权、别名真正覆盖基础词典、有效词典与覆盖层备份分离、完整候选池 Enrichment、旧会话条件清理、旧 SQLite 会话/默认阵容/趋势/别名迁移，以及语义索引 schema 版本断言。
+- 最终验收：系统 Node 18 全量 `495` 项为 `475 passed / 0 failed / 20 skipped`；bundled Node 24（含真实 SQLite 与持久化语义索引）全量为 `487 passed / 0 failed / 8 skipped`。`smoke:comps`、`smoke:small-window` 和 bundled Node 24 的 SQLite 文件库 smoke 均通过；最近一次小窗 smoke 热缓存 2ms、本地 JSON 重开 18ms。阶段实现时的最终真实 LLM 复验逐字段通过 `gemini-3.6-flash`。
+
 ## 当前限制
 
 - 装备 catalog 已能从 MetaTFT items 抓包生成，并已接入同 patch 的腾讯官网简中目录、Riot Data Dragon 英文回退、人工俗称覆盖、派生别名和覆盖审计。2026-07-11 实时动态装备为 179/179 官方简中，人工入口为 169/169；`TFT_Item_Artifact_CappaJuice` 已由腾讯官网 `version=16.13 / season=2026.S17` 确认为“帽子饮品”，同时保留 `Cappa Juice`。后续 patch 仍需重新刷新并审计，不能把本次满覆盖永久外推。

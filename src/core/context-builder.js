@@ -135,6 +135,9 @@ export function buildQueryContext(parsedQuery, options = {}) {
   if (comp) constraints.comp = { ...comp };
 
   return {
+    seasonContextId: preferences.seasonContextId ?? "set17-live",
+    providerVersion: preferences.providerVersion ?? null,
+    effectivePatch: preferences.effectivePatch ?? patch,
     rawInput: parsedQuery.rawInput,
     intent: parsedQuery.intent,
     unit: parsedQuery.unit,

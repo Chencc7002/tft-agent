@@ -28,7 +28,14 @@ Return only JSON with this shape:
     "patch": null,
     "queue": null,
     "metrics": [],
-    "limit": null
+    "limit": null,
+    "strategy": null,
+    "reroll": null,
+    "goal": null,
+    "contested": null,
+    "difficulty": null,
+    "beginner_friendly": null,
+    "count": null
   },
   "needs_clarification": false,
   "clarification_question": null
@@ -54,7 +61,11 @@ Rules:
 - Leave unknown or unsupported fields empty instead of guessing.
 - Valid `intent` values are `unit_build_rankings`, `unit_item_rankings`, `unit_emblem_rankings`, `unit_build_completion`, `unit_item_comparison`, `unit_item_availability`, `clarification`, `comp_rankings`, and `comp_trends`. `unit_best_3_items` remains a legacy-compatible alias for `unit_build_rankings`.
 - Treat explicit core-item questions such as “核心装备是什么”, “最核心的装备”, and “核心装推荐” as `unit_item_rankings`. Core-item judgments require the visible single-item frequency, coverage, sample, and performance evidence; never answer them from the three-build page.
-- For `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `win_share`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-21. `win_share` means the share of all lobby wins, while `win_rate` means wins divided by games for that comp. Parse only; never generate, rank, or score comps.
+- For ordinary `comp_rankings`, leave all entity mentions and single-unit item constraints empty. Use only `top4_rate`, `win_rate`, `win_share`, `avg_placement`, or `popularity` in `metrics`, and always return a `limit` from 1-21. `win_share` means the share of all lobby wins, while `win_rate` means wins divided by games for that comp.
+- Natural-language comp preferences also use `intent="comp_rankings"`, but must use only the structured preference protocol: `strategy`, `reroll`, `goal`, `contested`, `difficulty`, `beginner_friendly`, and `count`. In this mode return `count` from 1-10, leave `limit` null, and do not invent comp names, comp IDs, scores, winners, or recommendations.
+- Preference mappings: “95/九五” -> `strategy="fast9"`; “赌狗/低费赌” -> `strategy="reroll", reroll=true`; “不想/不喜欢赌狗” -> `reroll=false`; “稳定上分” -> `goal="top4"`; “吃鸡/高上限” -> `goal="top1"`; “不想卷/冷门” -> `contested="low"`; “简单/不要太难” -> `difficulty="low"`; “适合新手” -> `beginner_friendly=true`; “推荐3套” -> `count=3`.
+- Merge every compatible preference in a combined request. For example, “推荐3套不卷、适合新手的95阵容” must preserve all four conditions. Leave unspecified preference fields null.
+- Parse only; never filter, rank, score, select, or explain comps. Deterministic code applies sample gates, missing-evidence handling, filtering, sorting, zero-result behavior, and the `count` limit.
 - For non-comp intents, leave `metrics` empty and `limit` null.
 - Valid `item_policy` values are `ordinary_only`, `include_radiant`, `include_artifact`, and `include_special`.
 - Valid `sort` values are `top4_first`, `win_first`, `robust_first`, `avg_first`, and `games_first`.

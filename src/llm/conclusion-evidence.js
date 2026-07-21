@@ -310,7 +310,28 @@ function buildCompRankings(result, options = {}) {
         traits: asArray(comp?.traits).slice(0, 8).map((trait) => ({
           name: clipped(trait?.name ?? trait?.apiName ?? trait?.filterId, 80),
           tier: finite(trait?.tier)
-        }))
+        })),
+        enrichment: {
+          strategy: comp?.strategyDerivation ? {
+            value: comp.strategyDerivation.strategy,
+            reason: asArray(comp.strategyDerivation.reason).map((reason) => clipped(reason, 120)),
+            algorithmVersion: comp.strategyDerivation.algorithmVersion,
+            confidence: finite(comp.strategyDerivation.confidence),
+            source: "tftclarity_automatic_derivation"
+          } : null,
+          profile: comp?.profile ? {
+            ...comp.profile,
+            profileKey: comp.profileKey,
+            source: "tftclarity_profile"
+          } : null,
+          binding: comp?.profileBinding ?? null,
+          sources: {
+            facts: "metatft",
+            strategy: "tftclarity_automatic_derivation",
+            profile: comp?.profile ? "tftclarity_profile" : null
+          }
+        },
+        preferenceMatch: comp?.preferenceMatch ?? null
       };
       byCompId.set(key, record);
       records.push(record);
@@ -362,7 +383,9 @@ function buildCompRankingContext(result, recommendations) {
     lowSampleEvidenceIds: recommendations.filter((entry) => entry.lowSample).map((entry) => entry.evidenceId),
     directAnalysisEvidenceIds: recommendations.length <= 12
       ? recommendations.map((entry) => entry.evidenceId)
-      : [...new Set(metricLeaders.map((entry) => entry.evidenceId))]
+      : [...new Set(metricLeaders.map((entry) => entry.evidenceId))],
+    enrichment: result?.enrichment ?? null,
+    preferenceSearch: result?.preferenceSearch ?? null
   };
 }
 

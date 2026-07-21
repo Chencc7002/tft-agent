@@ -56,6 +56,14 @@ export {
   METATFT_DEFAULT_MIN_PLAYRATE,
   buildCompRankings
 } from "./core/comp-ranking-service.js";
+export {
+  COMP_PREFERENCE_PROTOCOL_VERSION,
+  COMP_PREFERENCE_SEARCH_VERSION,
+  applyCompPreferenceSearch,
+  isCompPreferenceInput,
+  parseCompPreferenceConditions,
+  validateCompPreferenceConditions
+} from "./core/comp-preference-search.js";
 export { filterBuildRows } from "./core/item-policy-filter.js";
 export {
   compareRankedBuilds,
@@ -167,10 +175,32 @@ export {
   makeQueryCacheKey
 } from "./data/cache-store.js";
 export {
+  migrateSQLiteSeasonContextSchema,
   SQLITE_CACHE_SCHEMA,
   SQLiteCacheStore
 } from "./data/sqlite-cache-store.js";
 export { MetaTFTClient, CompsContextClient } from "./data/metatft-client.js";
+export {
+  COMP_PROFILE_DEFAULTS,
+  COMP_PROFILE_FIELDS,
+  COMP_STRATEGY_ALGORITHM_VERSION,
+  LINEUP_SIGNATURE_VERSION,
+  MIN_PROFILE_MATCH_CONFIDENCE,
+  CompEnrichmentService,
+  createCompEnrichmentService,
+  createLineupSignature,
+  deriveCompStrategy,
+  normalizeCompProfileRecord,
+  validateCompProfile
+} from "./core/comp-enrichment.js";
+export {
+  DEFAULT_SEASON_CONTEXT_ID,
+  SEASON_CONTEXTS,
+  SeasonContextError,
+  SeasonContextService,
+  createSeasonContextService,
+  normalizeSeasonContextId
+} from "./season/season-context.js";
 export {
   createChatStructuredParser,
   createStructuredParserFromConfig,
@@ -265,6 +295,7 @@ export {
   SemanticDocumentStore,
   decodeSemanticEmbedding,
   encodeSemanticEmbedding,
+  migrateSQLiteSemanticSeasonContext,
   normalizeSemanticDocument,
   semanticContentHash
 } from "./retrieval/semantic-document-store.js";

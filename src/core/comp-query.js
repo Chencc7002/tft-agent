@@ -1,5 +1,10 @@
 import { DEFAULT_QUERY_OPTIONS } from "../data/static-data.js";
 import { normalizeText } from "./normalizer.js";
+import {
+  isCompPreferenceInput,
+  parseCompPreferenceConditions,
+  validateCompPreferenceConditions
+} from "./comp-preference-search.js";
 
 export const COMP_METRICS = Object.freeze([
   "top4_rate",
@@ -18,6 +23,7 @@ function unique(values) {
 export function isCompRankingInput(input) {
   const text = normalizeText(input);
   if (/(装备|三件套|怎么带|带什么)/.test(text)) return false;
+  if (isCompPreferenceInput(text)) return true;
   if (/阵容/.test(text)) return true;
   if (/(?:版本|当前).{0,8}(?:趋势|上升|提升)/.test(text)) return true;
   return /(?:这|当前)?版本.{0,8}(?:玩什么|什么好玩|容易上分)/.test(text);
@@ -96,15 +102,31 @@ function parseRankFilter(input) {
 
 export function buildCompRankingQuery(parsed = {}, options = {}) {
   const preferences = { ...DEFAULT_QUERY_OPTIONS, ...(options.preferences ?? {}) };
+  const preferenceRequested = Boolean(parsed.preferenceRequested);
+  const preferenceConditions = preferenceRequested
+    ? validateCompPreferenceConditions(parsed.preferenceConditions ?? {})
+    : null;
   const metrics = unique((parsed.metrics ?? []).filter((metric) => METRIC_SET.has(metric)));
   const trendRequested = Boolean(parsed.trendRequested);
   const intent = parsed.intent === "comp_trends" ? "comp_trends" : "comp_rankings";
   const popularRequested = Boolean(parsed.popularRequested);
   const defaultLimit = intent === "comp_rankings" && popularRequested ? 21 : 5;
+  const preferenceMetrics = preferenceConditions?.goal === "top1"
+    ? ["win_rate"]
+    : preferenceConditions?.goal === "top4"
+      ? ["top4_rate"]
+      : ["avg_placement"];
   return {
+    seasonContextId: String(preferences.seasonContextId ?? "set17-live"),
+    providerVersion: preferences.providerVersion ?? null,
+    effectivePatch: String(preferences.effectivePatch ?? parsed.patch ?? preferences.patch ?? "current"),
     intent,
-    metrics: metrics.length > 0 ? metrics : ["top4_rate", "win_share"],
-    limit: Math.min(21, Math.max(1, Number(parsed.limit ?? defaultLimit))),
+    metrics: preferenceRequested
+      ? preferenceMetrics
+      : metrics.length > 0 ? metrics : ["top4_rate", "win_share"],
+    limit: preferenceRequested
+      ? preferenceConditions.count
+      : Math.min(21, Math.max(1, Number(parsed.limit ?? defaultLimit))),
     minSamples: Math.max(0, Number(parsed.minSamples ?? options.minSamples ?? preferences.minSamples ?? 500)),
     days: Number(parsed.days ?? (trendRequested ? 3 : preferences.days) ?? 3),
     patch: String(parsed.patch ?? preferences.patch ?? "current"),
@@ -113,12 +135,15 @@ export function buildCompRankingQuery(parsed = {}, options = {}) {
     specialMode: Boolean(parsed.specialMode),
     popularRequested,
     trendRequested,
+    preferenceRequested,
+    preferenceConditions,
     dataVersion: String(options.dataVersion ?? "metatft-comps-page-v1")
   };
 }
 
 export function parseCompRankingQuery(input, options = {}) {
   const text = normalizeText(input);
+  const preference = parseCompPreferenceConditions(text);
   const trendRequested = /(?:阵容|版本|当前).{0,8}(?:趋势|上升|提升)|(?:趋势|上升|提升).{0,8}阵容/u.test(text);
   return buildCompRankingQuery({
     ...options,
@@ -129,6 +154,8 @@ export function parseCompRankingQuery(input, options = {}) {
     rankFilter: parseRankFilter(text) ?? options.rankFilter,
     popularRequested: /热门阵容|阵容热门|热门/.test(text),
     trendRequested,
+    preferenceRequested: preference.requested,
+    preferenceConditions: preference.conditions,
     specialMode: /(专属强化|英雄强化|特殊玩法|赌狗|d牌|d卡|追三|reroll)/i.test(text)
       || Boolean(options.specialMode)
   }, options);

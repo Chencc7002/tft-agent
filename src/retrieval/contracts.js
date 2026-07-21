@@ -160,6 +160,8 @@ export function createIntentEnvelope({ input = "", parsed = {}, query = {}, vali
       comp: comp.resolved,
       metrics: unique(query?.metrics).map(String),
       limit: finite(query?.limit),
+      preferenceRequested: Boolean(query?.preferenceRequested),
+      preferenceConditions: query?.preferenceConditions ?? null,
       trendRequested: Boolean(query?.trendRequested)
     },
     requestedMetrics: metricsFor(intent, query),
@@ -208,6 +210,7 @@ export function createRetrievalPlan(value = {}) {
 export function createSemanticHit(value = {}) {
   return {
     schemaVersion: SEMANTIC_HIT_SCHEMA_VERSION,
+    seasonContextId: String(value.seasonContextId ?? value.season_context_id ?? "set17-live"),
     id: String(value.id ?? ""),
     documentType: String(value.documentType ?? ""),
     score: finite(value.score, 0),

@@ -39,6 +39,7 @@ function entityDocument(entity, type, options) {
   const category = String(entity.category ?? "");
   const documentType = type === "item" && category === "emblem" ? "emblem_description" : type;
   return normalizeSemanticDocument({
+    seasonContextId: options.seasonContextId,
     id: `${options.patch}:${options.locale}:${documentType}:${apiName}`,
     documentType,
     apiName: entity.apiName ?? entity.filterId,
@@ -67,6 +68,7 @@ function descriptionDocument(value, index, options) {
   const type = String(value.documentType ?? value.type ?? "static_description");
   return normalizeSemanticDocument({
     ...value,
+    seasonContextId: value.seasonContextId ?? value.season_context_id ?? options.seasonContextId,
     id: value.id ?? `${options.patch}:${options.locale}:${type}:${index}`,
     documentType: type,
     content,
@@ -78,6 +80,7 @@ function descriptionDocument(value, index, options) {
 
 export function buildSemanticCorpus(catalog = {}, options = {}) {
   const settings = {
+    seasonContextId: String(options.seasonContextId ?? catalog.seasonContextId ?? "set17-live"),
     patch: String(options.patch ?? catalog.patch ?? "current"),
     locale: String(options.locale ?? catalog.locale ?? "zh-CN"),
     source: String(options.source ?? "tft_static_catalog")
@@ -99,6 +102,7 @@ export function buildSemanticCorpus(catalog = {}, options = {}) {
   if (options.includeIntentSamples !== false) {
     for (const [intent, samples] of Object.entries(options.intentSamples ?? INTENT_SEMANTIC_SAMPLES)) {
       samples.forEach((sample, index) => documents.push(normalizeSemanticDocument({
+        seasonContextId: settings.seasonContextId,
         id: `${settings.patch}:${settings.locale}:intent_sample:${intent}:${index + 1}`,
         documentType: "intent_sample",
         intent,

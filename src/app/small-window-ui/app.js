@@ -729,6 +729,44 @@ function renderPopularMetricSwitch(activeMetric) {
   </div>`;
 }
 
+function compPreferenceValueLabel(field, value) {
+  const labels = {
+    strategy: { reroll: "preferenceReroll", fast8: "preferenceFast8", fast9: "preferenceFast9" },
+    goal: { top4: "preferenceTop4", top1: "preferenceTop1", balanced: "preferenceBalanced" },
+    contested: { low: "preferenceLow", medium: "preferenceMedium", high: "preferenceHigh" },
+    difficulty: { low: "preferenceLow", medium: "preferenceMedium", high: "preferenceHigh" }
+  };
+  return labels[field]?.[value] ? t(labels[field][value]) : String(value);
+}
+
+function renderCompPreferenceSummary(data) {
+  const search = data.preferenceSearch;
+  if (!search) return "";
+  const conditions = search.conditions ?? {};
+  const chips = [];
+  if (conditions.strategy) chips.push(t("preferenceStrategy", { value: compPreferenceValueLabel("strategy", conditions.strategy) }));
+  if (conditions.reroll === false) chips.push(t("preferenceNoReroll"));
+  if (conditions.goal) chips.push(t("preferenceGoal", { value: compPreferenceValueLabel("goal", conditions.goal) }));
+  if (conditions.contested) chips.push(t("preferenceContested", { value: compPreferenceValueLabel("contested", conditions.contested) }));
+  if (conditions.difficulty) chips.push(t("preferenceDifficulty", { value: compPreferenceValueLabel("difficulty", conditions.difficulty) }));
+  if (conditions.beginnerFriendly !== null && conditions.beginnerFriendly !== undefined) {
+    chips.push(t(conditions.beginnerFriendly ? "preferenceBeginner" : "preferenceExperienced"));
+  }
+  chips.push(t("preferenceCount", { value: conditions.count ?? search.requestedCount ?? 3 }));
+  const statusKey = {
+    ok: "preferenceStatusOk",
+    low_sample_only: "preferenceStatusLowSample",
+    insufficient_profile: "preferenceStatusProfile",
+    insufficient_evidence: "preferenceStatusEvidence",
+    zero_results: "preferenceStatusZero"
+  }[search.status] ?? "preferenceStatusEvidence";
+  return `<section class="comp-preference-summary" data-status="${escapeHtml(search.status ?? "unknown")}">
+    <div><strong>${t("preferenceSearchTitle")}</strong><span>${escapeHtml(t(statusKey))}</span></div>
+    <div class="comp-preference-chips">${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}</div>
+    <small>${t("preferenceReturned", { returned: search.returnedCount ?? 0, requested: search.requestedCount ?? conditions.count ?? 3 })} · ${t("deterministicRanking")}</small>
+  </section>`;
+}
+
 function renderCompRankings(data) {
   const references = data.references ?? [];
   const isTrendView = data.type === "comp_trends";
@@ -765,6 +803,7 @@ function renderCompRankings(data) {
         <small>${t("daysRecent", { value: escapeHtml(data.query?.days ?? 3) })} · ${t("samplesAtLeast", { value: escapeHtml(data.query?.minSamples ?? 500) })} · ${t("rank")} ${escapeHtml(compRankLabel(data.query?.rankFilter))}</small>
         <small>${escapeHtml(compUpdatedLabel(data.source?.updatedAt))}</small>
       </div>
+      ${renderCompPreferenceSummary(data)}
       ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
       ${renderCompTrendNotice(data, [])}
       <div class="comp-footnote">${escapeHtml(data.source?.risk ?? t("externalRisk"))}</div>${sourceAndRisk(data)}`);
@@ -776,6 +815,7 @@ function renderCompRankings(data) {
       <span>${t("daysRecent", { value: escapeHtml(data.query?.days ?? 3) })} · ${t("samplesAtLeast", { value: escapeHtml(data.query?.minSamples ?? 500) })} · ${escapeHtml(stale)}</span>
       <small title="${escapeHtml(compRankLabel(data.query?.rankFilter))}">${t("rank")} ${escapeHtml(compRankLabel(data.query?.rankFilter))} · ${escapeHtml(compUpdatedLabel(data.source?.updatedAt))}</small>
     </div>
+    ${renderCompPreferenceSummary(data)}
     ${(data.warnings ?? []).map((warning) => `<div class="comp-warning">${escapeHtml(warning)}</div>`).join("")}
     ${isTrendView ? renderCompTrendNotice(data, [...rising, ...falling]) : ""}
     ${isPopularView ? `<div class="popular-ranking-toolbar"><span>${t("popularCompSample", { value: 21 })}</span>${metricSwitch}</div>` : ""}
