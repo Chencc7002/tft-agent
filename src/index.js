@@ -64,6 +64,19 @@ export {
   parseCompPreferenceConditions,
   validateCompPreferenceConditions
 } from "./core/comp-preference-search.js";
+export {
+  COMP_ANALYSIS_PROTOCOL_VERSION,
+  METATFT_HISTORY_CAPABILITY,
+  analyzeCompRankingResult,
+  isCompAnalysisInput,
+  parseCompAnalysisRequest,
+  resolveCompAnalysisTarget
+} from "./core/comp-analysis.js";
+export {
+  OFFICIAL_PATCH_EVIDENCE_VERSION,
+  associateOfficialPatchChanges,
+  getOfficialPatchEvidence
+} from "./data/official-patch-evidence.js";
 export { filterBuildRows } from "./core/item-policy-filter.js";
 export {
   compareRankedBuilds,
@@ -201,6 +214,18 @@ export {
   createSeasonContextService,
   normalizeSeasonContextId
 } from "./season/season-context.js";
+export {
+  SEASON_PROVIDER_OPERATIONS,
+  SeasonDataProvider,
+  SeasonProviderError,
+  UnavailableSeasonProvider,
+  createPbeProviderPlaceholder
+} from "./season/data-provider.js";
+export {
+  PROMOTABLE_SEASON_CONTENT_TYPES,
+  SeasonContentPromotionError,
+  buildSeasonContentPromotionPlan
+} from "./season/content-promotion.js";
 export {
   createChatStructuredParser,
   createStructuredParserFromConfig,

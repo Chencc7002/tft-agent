@@ -43,6 +43,27 @@ test("desktop UI exposes the responsive AppShell structure", () => {
   assert.match(conversation, /class Composer/);
 });
 
+test("season switching is server-validated, conversation-isolated, and theme-driven", () => {
+  assert.match(indexHtml, /id="season-context-select"/);
+  assert.match(indexHtml, /id="season-context-summary"/);
+  assert.match(styles, /\.season-context-control/);
+  assert.match(appJs, /fetch\("\/api\/season-contexts"\)/);
+  assert.match(appJs, /fetch\("\/api\/season-contexts\/select"/);
+  assert.match(appJs, /seasonContextId: state\.seasonContextId/);
+  assert.match(appJs, /resetConversation\(\{ previousSeasonContextId/);
+  assert.match(appJs, /seasonContextId: previousSeasonContextId/);
+  assert.match(appJs, /document\.title = theme\.documentTitle/);
+  assert.match(appJs, /wallpaperController\.setSeason/);
+  assert.match(appJs, /option\.disabled = !context\.selectable/);
+  assert.match(appJs, /theme\?\.patchNoteVersion/);
+  assert.match(wallpaperController, /setSeason\(seasonId, defaultWallpaperId/);
+  assert.match(wallpaperController, /localStorage\.setItem\(`\$\{WALLPAPER_ID_STORAGE_KEY\}\.\$\{this\.seasonId\}`/);
+  assert.match(wallpaperCatalog, /"set-18-pbe"/);
+  assert.match(i18n, /seasonComingSoonStatus/);
+  assert.match(i18n, /seasonArchivedStatus/);
+  assert.match(i18n, /seasonRevivalStatus/);
+});
+
 test("welcome view exposes localized, actionable quick tasks", () => {
   assert.match(indexHtml, /class="quick-tasks"/);
   assert.equal((indexHtml.match(/class="quick-task-card/g) ?? []).length, 4);

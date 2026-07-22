@@ -36,8 +36,51 @@ test("SeasonContext registry exposes only safe public records", () => {
   assert.equal(pbe.status, "coming_soon");
   assert.equal(pbe.selectable, false);
   assert.equal(pbe.availability.available, false);
+  assert.equal(live.theme.documentTitle, "tftclarity · Set 17");
+  assert.equal(live.theme.wallpaper.seasonId, "set-17");
+  assert.equal(live.theme.patchNoteVersion, "17.7");
+  assert.equal(pbe.theme.wallpaper.defaultId, null);
+  assert.equal(pbe.theme.patchNoteVersion, null);
+  assert.match(pbe.theme.riskNotice["en-US"], /cannot be queried/i);
   assert.equal("source" in live, false);
   assert.equal("catalogNamespace" in live, false);
+  assert.doesNotMatch(JSON.stringify(records), /api-hc\.metatft\.com|pbe-comps/);
+});
+
+test("two selectable live seasons resolve independent UI themes during a simulated switch", () => {
+  const registry = createSeasonContextService();
+  const set17 = registry.getDefault();
+  const set18 = {
+    ...structuredClone(set17),
+    id: "set18-live",
+    label: "Set 18 · Live",
+    season: 18,
+    isDefault: false,
+    catalogNamespace: "set18-live",
+    themeId: "set18",
+    theme: {
+      ...structuredClone(set17.theme),
+      documentTitle: "tftclarity · Set 18",
+      colors: { primary: "#805ad5", secondary: "#ed64a6" },
+      wallpaper: {
+        seasonId: "set-18",
+        directory: "/assets/wallpapers/set-18/",
+        defaultId: "set18-default"
+      },
+      patchNoteVersion: "18.1"
+    }
+  };
+  const service = createSeasonContextService({ contexts: [set17, set18] });
+
+  const before = service.publicRecord(service.resolveForQuery("set17-live"));
+  const after = service.publicRecord(service.resolveForQuery("set18-live"));
+
+  assert.equal(before.id, "set17-live");
+  assert.equal(after.id, "set18-live");
+  assert.notEqual(after.theme.documentTitle, before.theme.documentTitle);
+  assert.notEqual(after.theme.colors.primary, before.theme.colors.primary);
+  assert.notEqual(after.theme.wallpaper.seasonId, before.theme.wallpaper.seasonId);
+  assert.equal(after.selectable, true);
 });
 
 test("invalid and PBE SeasonContexts are rejected before any provider request", async () => {

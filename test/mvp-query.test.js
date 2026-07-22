@@ -65,6 +65,19 @@ const fixtureRows = [
   }
 ];
 
+test("specified item performance keeps the target separate from the Top 3 benchmark", () => {
+  const result = recommendFromRows("霞的羊刀表现怎么样？", fixtureRows, {
+    preferences: { minSamples: 1 }
+  });
+
+  assert.equal(result.type, "unit_item_rankings");
+  assert.equal(result.query.performanceItem, "TFT_Item_GuinsoosRageblade");
+  assert.deepEqual(result.query.lockedItems, []);
+  assert.equal(result.itemPerformance.target.apiName, "TFT_Item_GuinsoosRageblade");
+  assert.ok(result.itemPerformance.topRankings.length > 0);
+  assert.match(result.text, /鬼索的狂暴之刃/u);
+});
+
 function readProbeJson(name) {
   return JSON.parse(readFileSync(new URL(`../.probe/${name}`, import.meta.url), "utf8"));
 }

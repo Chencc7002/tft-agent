@@ -16,9 +16,37 @@ const CONTEXTS = [
       provider: "metatft-live",
       providerVersion: "metatft-live.v1",
       queue: "1100",
-      patchPolicy: "latest"
+      patchPolicy: "latest",
+      currentPatch: "17.7",
+      previousPatch: "17.6"
     },
     themeId: "set17",
+    theme: {
+      documentTitle: "tftclarity · Set 17",
+      subtitle: {
+        "zh-CN": "星神",
+        "en-US": "Cosmic"
+      },
+      colors: {
+        primary: "#6b63df",
+        secondary: "#34b9d6"
+      },
+      wallpaper: {
+        seasonId: "set-17",
+        directory: "/assets/wallpapers/set-17/",
+        defaultId: "set17-stargazer-convergence"
+      },
+      particles: {
+        density: 1,
+        speed: 1
+      },
+      patchNoteVersion: "17.7",
+      quickQuestions: {
+        "zh-CN": ["推荐当前版本热门阵容", "当前版本阵容趋势"],
+        "en-US": ["Recommend popular comps in the current patch", "Show current comp trends"]
+      },
+      riskNotice: null
+    },
     notices: []
   },
   {
@@ -40,6 +68,35 @@ const CONTEXTS = [
       patchPolicy: "latest"
     },
     themeId: "set18",
+    theme: {
+      documentTitle: "tftclarity · Set 18 PBE",
+      subtitle: {
+        "zh-CN": "PBE 预览",
+        "en-US": "PBE Preview"
+      },
+      colors: {
+        primary: "#7f6ac8",
+        secondary: "#d08bba"
+      },
+      wallpaper: {
+        seasonId: "set-18-pbe",
+        directory: null,
+        defaultId: null
+      },
+      particles: {
+        density: 0.72,
+        speed: 0.8
+      },
+      patchNoteVersion: null,
+      quickQuestions: {
+        "zh-CN": [],
+        "en-US": []
+      },
+      riskNotice: {
+        "zh-CN": "PBE 数据准备中，当前不可查询。",
+        "en-US": "PBE data is being prepared and cannot be queried yet."
+      }
+    },
     notices: ["PBE 数据准备中，当前不可查询。"]
   }
 ];
@@ -77,11 +134,26 @@ export class SeasonContextService {
     const contexts = options.contexts ?? SEASON_CONTEXTS;
     this.contexts = new Map(contexts.map((context) => [context.id, deepFreeze(clone(context))]));
     this.providerAvailability = new Map(Object.entries({
-      "metatft-live": { available: true },
+      "metatft-live": {
+        available: true,
+        status: "available",
+        health: {
+          status: "ready",
+          lastCheckedAt: null,
+          lastSuccessfulSyncAt: null,
+          catalogStatus: "runtime_managed"
+        }
+      },
       "metatft-pbe": {
         available: false,
         status: "coming_soon",
-        reason: "PBE provider interface has not been verified"
+        reason: "PBE provider interface has not been verified",
+        health: {
+          status: "not_verified",
+          lastCheckedAt: null,
+          lastSuccessfulSyncAt: null,
+          catalogStatus: "not_synced"
+        }
       },
       ...(options.providerAvailability ?? {})
     }));
@@ -153,7 +225,10 @@ export class SeasonContextService {
     return {
       ...clone(context),
       availability,
-      effectivePatch: context.source.patchPolicy === "latest" ? "current" : null
+      effectivePatch: context.source.patchPolicy === "latest" ? "current" : null,
+      currentPatch: context.source.currentPatch ?? null,
+      previousPatch: context.source.previousPatch ?? null,
+      providerPatch: context.source.patchPolicy === "latest" ? "current" : null
     };
   }
 
@@ -178,10 +253,17 @@ export class SeasonContextService {
       selectable: context.selectable && Boolean(availability.available),
       isDefault: context.isDefault,
       themeId: context.themeId,
+      theme: context.theme ? clone(context.theme) : null,
       notices: [...(context.notices ?? [])],
       availability: {
         available: Boolean(availability.available),
-        status: availability.status ?? (availability.available ? "available" : "unavailable")
+        status: availability.status ?? (availability.available ? "available" : "unavailable"),
+        health: availability.health ? clone(availability.health) : {
+          status: availability.available ? "unknown" : "unavailable",
+          lastCheckedAt: null,
+          lastSuccessfulSyncAt: null,
+          catalogStatus: "unknown"
+        }
       }
     };
   }

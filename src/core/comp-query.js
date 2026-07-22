@@ -108,7 +108,11 @@ export function buildCompRankingQuery(parsed = {}, options = {}) {
     : null;
   const metrics = unique((parsed.metrics ?? []).filter((metric) => METRIC_SET.has(metric)));
   const trendRequested = Boolean(parsed.trendRequested);
-  const intent = parsed.intent === "comp_trends" ? "comp_trends" : "comp_rankings";
+  const intent = parsed.intent === "comp_trends"
+    ? "comp_trends"
+    : parsed.intent === "comp_analysis"
+      ? "comp_analysis"
+      : "comp_rankings";
   const popularRequested = Boolean(parsed.popularRequested);
   const defaultLimit = intent === "comp_rankings" && popularRequested ? 21 : 5;
   const preferenceMetrics = preferenceConditions?.goal === "top1"
@@ -119,7 +123,7 @@ export function buildCompRankingQuery(parsed = {}, options = {}) {
   return {
     seasonContextId: String(preferences.seasonContextId ?? "set17-live"),
     providerVersion: preferences.providerVersion ?? null,
-    effectivePatch: String(preferences.effectivePatch ?? parsed.patch ?? preferences.patch ?? "current"),
+    effectivePatch: String(preferences.currentPatch ?? preferences.effectivePatch ?? parsed.patch ?? preferences.patch ?? "current"),
     intent,
     metrics: preferenceRequested
       ? preferenceMetrics
@@ -137,6 +141,8 @@ export function buildCompRankingQuery(parsed = {}, options = {}) {
     trendRequested,
     preferenceRequested,
     preferenceConditions,
+    analysisRequested: intent === "comp_analysis",
+    analysis: intent === "comp_analysis" ? parsed.analysis ?? null : null,
     dataVersion: String(options.dataVersion ?? "metatft-comps-page-v1")
   };
 }
@@ -162,7 +168,7 @@ export function parseCompRankingQuery(input, options = {}) {
 }
 
 export function isCompRankingFollowUp(parsed, previousQuery) {
-  if (!["comp_rankings", "comp_trends"].includes(previousQuery?.intent)) return false;
+  if (!["comp_rankings", "comp_trends", "comp_analysis"].includes(previousQuery?.intent)) return false;
   if (parsed?.unit
     || (parsed?.ownedItems ?? []).length > 0
     || (parsed?.excludedItems ?? []).length > 0
@@ -171,7 +177,7 @@ export function isCompRankingFollowUp(parsed, previousQuery) {
     || (parsed?.parser?.unresolvedEntityHints ?? []).length > 0
     || (parsed?.parser?.entityAmbiguities ?? []).length > 0) return false;
   if (/(?:装备|英雄|纹章|效果|合成|配方)/u.test(parsed?.rawInput ?? "")) return false;
-  if (["comp_rankings", "comp_trends"].includes(parsed?.intent)) return true;
+  if (["comp_rankings", "comp_trends", "comp_analysis"].includes(parsed?.intent)) return true;
   return ["rankFilter", "days", "patch", "minSamples", "sort"].some((key) => parsed?.[key] !== undefined)
     || /(?:呢|再看|换成|改成|如果|那)/u.test(parsed?.rawInput ?? "");
 }

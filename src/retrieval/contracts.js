@@ -81,6 +81,7 @@ function metricsFor(intent, query) {
   const explicit = unique(query?.requestedMetrics ?? query?.metrics);
   if (explicit.length) return explicit;
   if (intent === "comp_trends") return ["placementImprovement", "pickRate", "games", "trendScore"];
+  if (intent === "comp_analysis") return ["avgPlacement", "top4Rate", "winRate", "pickRate", "games", "historicalComparison", "officialPatch"];
   if (intent === "comp_rankings") return ["top4Rate", "winRate", "avgPlacement", "pickRate", "games"];
   if (["unit_build_rankings", "unit_build_completion", "unit_best_3_items"].includes(intent)) {
     return ["games", "avgPlacement", "top4Rate", "winRate"];
@@ -162,7 +163,9 @@ export function createIntentEnvelope({ input = "", parsed = {}, query = {}, vali
       limit: finite(query?.limit),
       preferenceRequested: Boolean(query?.preferenceRequested),
       preferenceConditions: query?.preferenceConditions ?? null,
-      trendRequested: Boolean(query?.trendRequested)
+      trendRequested: Boolean(query?.trendRequested),
+      analysisRequested: Boolean(query?.analysisRequested),
+      analysis: query?.analysis ?? null
     },
     requestedMetrics: metricsFor(intent, query),
     needsClarification,

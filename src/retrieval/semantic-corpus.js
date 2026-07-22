@@ -13,7 +13,8 @@ export const INTENT_SEMANTIC_SAMPLES = Object.freeze({
     "易大师适合什么纹章"
   ],
   comp_rankings: ["当前阵容排行", "哪些阵容上分稳定", "阵容前四率和登顶率排名"],
-  comp_trends: ["最近哪些阵容在上升", "阵容趋势变化", "值得关注的新兴阵容"]
+  comp_trends: ["最近哪些阵容在上升", "阵容趋势变化", "值得关注的新兴阵容"],
+  comp_analysis: ["这个阵容还能玩吗", "为什么突然变强或变弱", "当前卷不卷", "适合上分还是吃鸡"]
 });
 
 function compact(values) {

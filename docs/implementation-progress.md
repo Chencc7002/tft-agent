@@ -362,3 +362,38 @@ availabilityPolicy=item-availability-overrides-only
 4. 在按 catalog 复用的内存 BM25 + 稀疏 TF-IDF 索引基础上，评估后续是否接入跨进程持久化索引文件或稠密语义 embedding；候选仍必须走人工确认后才能进入主字典。
 5. 在 Windows 启动器基础上继续封装桌面体验：贴边吸附、托盘、透明/点击穿透，可评估 Electron、Tauri 或 WebView2。
 6. 将 `npm run smoke:small-window` 纳入默认发布前检查；`npm run smoke:metatft` 作为需要网络和非官方 API 稳定性的手动发布前检查，而不是默认 CI。
+
+## 2026-07-22 阶段 5-8：游戏分析、赛季切换、PBE 占位与交付
+
+### 阶段 5：游戏数据智能分析
+
+- 新增 `comp_analysis` 意图、目标阵容解析、当前五项指标事实、版本化趋势快照、官方 17.7 公告关联、确定性分析答案和专用小窗视图。
+- Evidence Pack 明确区分 MetaTFT 实时事实、历史快照、官方公告、自动推导和人工 Profile；缺失值不补造，公告关联只表达“可能相关”。
+- 实测 MetaTFT 历史 patch 请求不能可靠证明返回值对应所请求版本，因此历史能力采用 `snapshot_required`。没有可验证基线时明确安全降级，不让 LLM 猜测变化。
+
+### 阶段 6：普通用户赛季切换与主题
+
+- `GET /api/season-contexts` 返回服务端白名单中的可见空间，`POST /api/season-contexts/select` 再次校验可选择性和 provider 可用性；浏览器只保存 `seasonContextId`。
+- 每次 `/api/recommend` 都携带已验证赛季 ID。跨赛季切换先清理旧赛季会话并生成新 `conversationId`，不继承旧条件或结果。
+- 标题、赛季副标题、主色、壁纸目录/默认壁纸、粒子参数、公告版本、快捷问题和风险提示均来自受信注册表主题配置。壁纸选择按赛季分别持久化。
+- 顶部选择器支持 live、PBE、返场、coming soon 和 archived 的展示；当前 `set18-pbe` 可见但禁用。桌面、双栏和移动端单页切换均已进入视觉 smoke。
+
+### 阶段 7：PBE 安全占位
+
+- `set18-pbe` 保持 `coming_soon`、`selectable=false`，并带预览主题、不可查询提示和 `not_verified/not_synced` 健康状态。
+- 新增统一 Season Provider 接口与 `UnavailableSeasonProvider`。PBE 的 catalog、阵容、装备和英雄请求全部直接抛出 `season_provider_unavailable`，绝不回退正式服。
+- 新增 PBE→Live 内容提升计划契约：仅允许同 Set 的显式 PBE→Live、默认 dry-run、要求审核、不覆盖目标、不复制事实或查询缓存；执行保持关闭，等待受保护管理流程。
+
+### 阶段 8：验证结果
+
+- `npm test`：系统 Node 18.20.8 共 510 项，490 passed、0 failed、20 skipped；bundled Node 24.14.0 共 510 项，502 passed、0 failed、8 skipped。Node 24 已覆盖真实 SQLite 迁移、持久化别名/Profile 和语义索引；剩余 8 项为明确标记的 obsolete 用例，跳过项未计为通过。
+- `npm run smoke:small-window`：通过；热缓存 3ms、本地缓存 9ms。
+- `npm run smoke:comps`：通过；离线 MetaTFT 页面口径一致性检查通过。
+- `npm run smoke:metatft`：通过；实时 items 183 行、unit_builds 600 行，目标请求 485ms，低样本降级和默认阵容上下文均符合预期。
+- `npm run audit:aliases`：通过；英雄 62/62、羁绊 104/104、装备 169/169。
+- `npm run audit:items`：通过；当前显式可用性覆盖项为 0，无冲突。
+- `npm run audit:item-patch`：通过；178→180，新增 2、移除 0、缺少本地化 0、名称变化 0。
+- `npm run smoke:visual -- --playwright-module <bundled-playwright>`：通过；1200/760/520/460/360px 无横向溢出或紧凑文字裁切。真实执行 Set 17→Set 18 浏览器切换，确认标题、主题、摘要、空结果态、会话 ID、旧会话清理和后续请求的 `seasonContextId` 全部同步；验证中同时修复了 360px 设置抽屉被法律声明遮挡的问题，并将旧的纵向双面板断言更新为当前移动端聊天/结果单页切换路径。
+- `npm run smoke:sqlite`：系统 Node 18 因无 `node:sqlite` 且未安装可选 `better-sqlite3` 而明确跳过；随后使用 bundled Node 24.14.0 复验通过，生成 229,376 字节文件库并验证重开缓存命中、目录/会话/查询清理和零意外远程请求。
+
+管理员入口、鉴权、持久化选择、迁移边界和常用操作见 `docs/admin-season-operations.md`。

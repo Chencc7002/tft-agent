@@ -1154,13 +1154,21 @@ export async function resetSmallWindowPreferences(runtime, scope = null) {
 
 function serializeRecommendation(result, catalog, meta = {}) {
   const { itemDetails, ...publicMeta } = meta;
-  if (result.type === "comp_rankings" || result.type === "comp_trends") {
+  if (["comp_rankings", "comp_trends", "comp_analysis"].includes(result.type)) {
     return serializeCompRankings(result, publicMeta);
   }
   const query = result.query ?? {};
   if (result.type === "unit_item_rankings" || result.type === "unit_emblem_rankings") {
     const itemRankings = (result.itemRankings ?? []).map((entry) => serializeItemRanking(entry, catalog));
     const references = (result.itemRankingReferences ?? []).slice(0, 5).map((entry) => serializeItemRanking(entry, catalog));
+    const itemPerformance = result.itemPerformance
+      ? {
+        item: result.itemPerformance.target ? serializeItemRanking(result.itemPerformance.target, catalog) : null,
+        rank: result.itemPerformance.targetRank,
+        topRankings: (result.itemPerformance.topRankings ?? []).map((entry) => serializeItemRanking(entry, catalog)),
+        conclusion: result.itemPerformance.conclusion
+      }
+      : null;
     const best = itemRankings[0] ?? null;
     const specialAveragePlacementOnly = result.itemRankingMethodology?.methodology === "special_item_outlier_cleaned_avg_placement_only";
     return {
@@ -1173,16 +1181,17 @@ function serializeRecommendation(result, catalog, meta = {}) {
         iconUrl: ASSET_RESOLVER.resolveUnit(query.unit).iconUrl
       } : null,
       answer: {
-        summary: best
+        summary: itemPerformance?.conclusion ?? (best
           ? `${compAnswerPrefix(query.comp)}${best.name}在当前条件的单装备聚合中排名第一。`
-          : `${compAnswerPrefix(query.comp)}${result.text}`,
-        evidence: best?.stats ?? null,
+          : `${compAnswerPrefix(query.comp)}${result.text}`),
+        evidence: itemPerformance?.item?.stats ?? best?.stats ?? null,
         warnings: query.warnings ?? [],
         methodology: specialAveragePlacementOnly
           ? `先剔除样本低于同类最高样本 2%（本次为 ${result.itemRankingMethodology?.sampleFloor?.outlierFloor ?? 0}）的极低样本离群项；其余神器与光明装备仅按平均名次升序排列，样本数只作可信度参考，不参与排序`
           : "按合法完整三件套是否包含该装备聚合；重复件只计一次组合样本"
       },
       itemRankings,
+      itemPerformance,
       itemRankingReferences: references,
       methodology: result.itemRankingMethodology,
       cards: [],
@@ -1193,6 +1202,7 @@ function serializeRecommendation(result, catalog, meta = {}) {
         unitIconUrl: ASSET_RESOLVER.resolveUnit(query.unit).iconUrl,
         traitNames: (query.traitFilters ?? []).map((filterId) => traitName(filterId, catalog)),
         ownedItemNames: (query.ownedItems ?? []).map((apiName) => itemName(apiName, catalog)),
+        performanceItemName: query.performanceItem ? itemName(query.performanceItem, catalog) : null,
         excludedItemNames: (query.excludedItems ?? []).map((apiName) => itemName(apiName, catalog)),
         comp: serializeCompConstraint(query.comp, catalog),
         defaultContextSummary: serializeDefaultContext(query.defaultContext, catalog)
@@ -1507,7 +1517,11 @@ function serializeCompRankings(result, meta = {}) {
   }
   return {
     ok: true,
-    type: result.type === "comp_trends" ? "comp_trends" : "comp_rankings",
+    type: result.type === "comp_trends"
+      ? "comp_trends"
+      : result.type === "comp_analysis"
+        ? "comp_analysis"
+        : "comp_rankings",
     rankings,
     rising: (result.rising ?? result.improving ?? []).map(serializeComp),
     falling: (result.falling ?? []).map(serializeComp),
@@ -1516,12 +1530,19 @@ function serializeCompRankings(result, meta = {}) {
     trend: result.trend ?? null,
     query: result.query,
     text: result.text ?? "",
-    answer: result.preferenceSearch ? {
+    answer: result.analysis ? {
+      summary: result.analysis.answer?.conclusion ?? result.text ?? "",
+      reasons: result.analysis.answer?.reasons ?? [],
+      evidence: result.analysis.answer?.evidence ?? [],
+      risks: result.analysis.answer?.risks ?? [],
+      evidenceStatus: result.analysis.evidenceStatus ?? result.analysis.status
+    } : result.preferenceSearch ? {
       summary: result.text ?? "",
       warnings: result.warnings ?? [],
       methodology: result.preferenceSearch.methodology,
       evidenceStatus: result.preferenceSearch.status
     } : null,
+    analysis: result.analysis ?? null,
     preferenceSearch: result.preferenceSearch ?? null,
     source: result.source,
     warnings: result.warnings ?? [],
@@ -2279,7 +2300,9 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
     seasonContextId: seasonContext.id,
     providerVersion: seasonContext.source.providerVersion,
     effectivePatch: seasonContext.effectivePatch,
-    patch: seasonContext.effectivePatch,
+    currentPatch: seasonContext.currentPatch,
+    previousPatch: seasonContext.previousPatch,
+    patch: seasonContext.providerPatch ?? "current",
     queue: seasonContext.source.queue
   };
   if (body.refresh) {

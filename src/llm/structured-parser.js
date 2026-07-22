@@ -7,7 +7,8 @@ const VALID_INTENTS = new Set([
   "unit_item_comparison",
   "clarification",
   "comp_rankings",
-  "comp_trends"
+  "comp_trends",
+  "comp_analysis"
 ]);
 
 const VALID_COMP_STRATEGIES = new Set(["reroll", "fast8", "fast9"]);
@@ -425,6 +426,20 @@ export function validateStructuredParserOutput(rawValue) {
     }
     if (value.constraints.strategy === "reroll" && value.constraints.reroll === false) {
       errors.push("constraints.strategy=reroll conflicts with constraints.reroll=false");
+    }
+  } else if (intent === "comp_analysis") {
+    if (value.entities.itemMentions.length > 0
+      || value.constraints.lockedItemMentions.length > 0
+      || value.constraints.comparisonItemMentions.length > 0
+      || value.constraints.excludedItemMentions.length > 0) {
+      errors.push("comp_analysis cannot include item constraints");
+    }
+    if (value.constraints.starLevel.length > 0
+      || value.constraints.itemCount !== undefined
+      || value.constraints.itemPolicy !== undefined
+      || value.constraints.sort !== undefined
+      || preferenceMode) {
+      errors.push("comp_analysis cannot include single-unit item or preference constraints");
     }
   } else if (value.constraints.metrics.length > 0
     || value.constraints.limit !== undefined

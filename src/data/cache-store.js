@@ -125,6 +125,7 @@ export function makeQueryCacheKey(query) {
     locked_items: sortStrings(query.lockedItems ?? query.ownedItems ?? query.locked_items ?? query.owned_items),
     comparison_items: sortStrings(query.comparisonItems ?? query.comparison_items ?? query.comparison?.itemApiNames),
     comparison_mode: query.comparisonMode ?? query.comparison_mode ?? null,
+    performance_item: query.performanceItem ?? query.performance_item ?? null,
     primary_metric: query.primaryMetric ?? query.primary_metric ?? null,
     comp: query.comp?.status === "applied" ? query.comp.value?.id ?? "invalid" : "none",
     comp_semantics: query.comp?.semanticsVersion ?? query.comp?.value?.semanticsVersion ?? "none",

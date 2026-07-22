@@ -101,7 +101,7 @@ function criticalErrors(legacy) {
   for (const record of recommendations) {
     if (!record?.evidenceId) errors.push("missing_evidence_id");
     const stats = record?.stats;
-    if (["unit_build_rankings", "unit_item_rankings", "unit_emblem_rankings", "unit_item_comparison", "comp_rankings", "comp_trends"].includes(intent)) {
+    if (["unit_build_rankings", "unit_item_rankings", "unit_emblem_rankings", "unit_item_comparison", "comp_rankings", "comp_trends", "comp_analysis"].includes(intent)) {
       if (!stats || !Number.isFinite(Number(stats.games))) errors.push(`missing_games:${record?.evidenceId ?? "unknown"}`);
     }
   }
@@ -123,6 +123,7 @@ function derivedSignals(legacy) {
     itemSignals: array(legacy?.itemSignals),
     itemRankingContext: legacy?.itemRankingContext ?? null,
     compRankingContext: legacy?.compRankingContext ?? null,
+    compAnalysis: legacy?.compRankingContext?.analysis ?? null,
     comparison: legacy?.comparison ? {
       winner: legacy.comparison.winner ?? null,
       winnerEvidenceId: legacy.comparison.winnerEvidenceId ?? null,
@@ -164,10 +165,24 @@ export class EvidenceAssembler {
     }
 
     const metadata = sourceMetadata(result, legacy);
+    const analysisEvidence = array(result?.analysis?.evidencePack).map((record, index) => ({
+      ...record,
+      evidenceId: `analysis-source:${index + 1}`,
+      visible: true,
+      authority: record.sourceType === "official_patch"
+        ? "official_patch"
+        : record.sourceType === "metatft_fact" || record.sourceType === "historical_fact"
+          ? "primary_statistics"
+          : record.sourceType,
+      source: record.sourceName,
+      patch: record.effectivePatch,
+      updatedAt: record.sourceUpdatedAt,
+      cacheStatus: metadata.cache
+    }));
     const structuredEvidence = [
       ...array(legacy.recommendations),
       ...array(legacy.itemSignals)
-    ].map((record) => decorateStructured(record, metadata));
+    ].map((record) => decorateStructured(record, metadata)).concat(analysisEvidence);
     const configuredBudget = plan?.evidenceBudget ?? this.options.evidenceBudget ?? {};
     const maxItems = Math.max(1, Number(configuredBudget.maxItems ?? DEFAULT_EVIDENCE_MAX_ITEMS));
     const maxCharacters = Math.max(256, Number(configuredBudget.maxCharacters ?? DEFAULT_EVIDENCE_MAX_CHARACTERS));
