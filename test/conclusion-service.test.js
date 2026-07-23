@@ -148,7 +148,7 @@ test("conclusion service accepts a uniquely repaired citation without another pr
   assert.deepEqual(conclusion.content.alternatives[0].evidenceIds, ["build:1", "build:2"]);
 });
 
-test("conclusion service rejects a missing required dimension without asking the LLM to rewrite facts", async () => {
+test("conclusion service asks the LLM to repair a missing required dimension", async () => {
   const calls = [];
   const conclusion = await generateEvidenceBackedConclusion({
     result: buildResult(),
@@ -163,9 +163,6 @@ test("conclusion service rejects a missing required dimension without asking the
         return candidate;
       }
       if (calls.length === 2) {
-        candidate.reasons[1].evidenceIds = [
-          "item-signal:1", "item-signal:2", "item-signal:3", "item-signal:4", "item-signal:5"
-        ];
         return candidate;
       }
       if (calls.length === 3) {
@@ -184,10 +181,33 @@ test("conclusion service rejects a missing required dimension without asking the
       return candidate;
     }
   });
+  assert.equal(conclusion.status, "generated");
+  assert.equal(conclusion.corrections, 1);
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].validationFeedback), /missing_answer_dimension/u);
+});
+
+test("correctable structural omissions fall back after at most two correction attempts", async () => {
+  let calls = 0;
+  const conclusion = await generateEvidenceBackedConclusion({
+    result: buildResult(),
+    catalog,
+    input: "fixture build query",
+    config,
+    provider: async ({ evidence }) => {
+      calls += 1;
+      const candidate = output(evidence);
+      candidate.addressedDimensions = candidate.addressedDimensions.filter((dimension) => dimension !== "core_item_tendency");
+      candidate.reasons = candidate.reasons.filter((entry) => entry.dimension !== "core_item_tendency");
+      candidate.summary = ["当前仍缺少必要结构甲。", "当前仍缺少必要结构乙。", "当前仍缺少必要结构丙。"][calls - 1];
+      return candidate;
+    }
+  });
+
   assert.equal(conclusion.status, "fallback");
   assert.equal(conclusion.reason, "invalid_output");
-  assert.equal(calls.length, 1);
-  assert.match(JSON.stringify(conclusion.validationFeedback), /missing_answer_dimension/u);
+  assert.equal(conclusion.corrections, 2);
+  assert.equal(calls, 3);
 });
 
 test("conclusion service classifies non-JSON provider output as invalid output", async () => {
@@ -275,6 +295,6 @@ test("conclusion cache keys isolate evidence, model, base prompt and the selecte
     conclusionSpec: { ...versionedEvidence.conclusionSpec, version: 2 }
   }, { model: "model-a" }), versionedBaseline);
   assert.notEqual(makeConclusionCacheKey(versionedEvidence, {
-    model: "model-a", validatorVersion: "conclusion-validator.v4"
+    model: "model-a", validatorVersion: "conclusion-validator.v5"
   }), versionedBaseline);
 });

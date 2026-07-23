@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createConclusionPromptRegistry } from "./conclusion-prompt-registry.js";
 
 const PROMPT_URL = new URL("./prompts/generate-conclusion.md", import.meta.url);
-export const DEFAULT_CONCLUSION_TIMEOUT_MS = 1800;
-export const DEFAULT_CONCLUSION_MAX_OUTPUT_TOKENS = 350;
+export const DEFAULT_CONCLUSION_TIMEOUT_MS = 10000;
+export const DEFAULT_CONCLUSION_MAX_OUTPUT_TOKENS = 1600;
 
 const CONCLUSION_RESPONSE_SCHEMA = {
   type: "object",
@@ -146,9 +146,9 @@ export function resolveConclusionProviderConfig(options = {}, env = process.env)
     useMaxCompletionTokens: options.useMaxCompletionTokens ?? usesReasoningCompletionTokens(model),
     useStructuredOutput: options.useStructuredOutput ?? usesReasoningCompletionTokens(model),
     includeResponseFormat: options.includeResponseFormat ?? true,
-    promptVersion: String(options.promptVersion ?? "generate-conclusion.v9"),
+    promptVersion: String(options.promptVersion ?? "generate-conclusion.v10"),
     maxCorrections: Math.max(0, Math.min(5, Math.floor(Number(
-      options.maxCorrections ?? env.TFT_AGENT_CONCLUSION_MAX_CORRECTIONS ?? 3
+      options.maxCorrections ?? env.TFT_AGENT_CONCLUSION_MAX_CORRECTIONS ?? 2
     )))),
     maxValidationErrors: Math.max(1, Math.min(50, Math.floor(Number(
       options.maxValidationErrors ?? env.TFT_AGENT_CONCLUSION_MAX_VALIDATION_ERRORS ?? 8

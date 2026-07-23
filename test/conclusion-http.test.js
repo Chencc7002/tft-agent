@@ -71,6 +71,42 @@ test("small-window HTTP serialization adds generatedConclusion without replacing
   assert.equal(payload.text, buildConclusionResult().text);
 });
 
+test("one recommendation request consumes one AI quota unit across parsing and conclusion corrections", async () => {
+  let providerCalls = 0;
+  let quotaReservations = 0;
+  const runtime = runtimeWith(async ({ evidence }) => {
+    providerCalls += 1;
+    const candidate = providerOutput(evidence);
+    if (providerCalls === 1) {
+      candidate.reasons = candidate.reasons.filter((entry) => entry.dimension !== "sample_risk");
+    }
+    return candidate;
+  }, { maxCorrections: 2 });
+  runtime.structuredParser = async () => ({ intent: "unit_build_rankings" });
+  runtime.recommendForInputImpl = async (_input, options) => {
+    await options.structuredParser?.({ input: "fixture" });
+    return structuredClone(buildConclusionResult());
+  };
+  const accessService = {
+    config: { enabled: true },
+    reserveLlmUse() {
+      quotaReservations += 1;
+    },
+    publicStatus() {
+      return { quota: { used: quotaReservations } };
+    }
+  };
+
+  const { payload } = await handleRecommendRequest({ input: "fixture" }, runtime, {
+    accessService,
+    visitor: { scope: "quota-user" }
+  });
+
+  assert.equal(payload.answer.generatedConclusion.status, "generated");
+  assert.equal(providerCalls, 2);
+  assert.equal(quotaReservations, 1);
+});
+
 test("deferred conclusions return deterministic cards before starting the provider", async () => {
   let releaseProvider;
   let providerCalls = 0;
@@ -113,6 +149,9 @@ test("deferred conclusions return deterministic cards before starting the provid
   const complete = handleConclusionStatusRequest(runtime, payload.answer.generatedConclusion.jobId, "mini-user-a");
   assert.equal(complete.payload.status, "complete");
   assert.equal(complete.payload.conclusion.content.headline, providerOutput().headline);
+  const queryEvent = await runtime.cacheStore.getQueryEvent(payload.queryId);
+  assert.equal(queryEvent.response.answer.generatedConclusion.status, "generated");
+  assert.equal(queryEvent.llmUsed, true);
 });
 
 test("conclusion stream emits validated text one Unicode character at a time", async () => {

@@ -1445,6 +1445,7 @@ function generatedConclusionCard(data) {
     </section>`;
   }
   const content = conclusion.content;
+  const missingDimensions = conclusionMissingDimensions(content);
   const reasons = (content.reasons ?? []).map((reason) => `<li>${escapeHtml(reason.text)}</li>`).join("");
   const alternatives = (content.alternatives ?? []).map((alternative) => `<li>${escapeHtml(alternative.text)}</li>`).join("");
   const supportingEvidence = (conclusion.supportingEvidence ?? []).map((evidence) => `
@@ -1459,6 +1460,7 @@ function generatedConclusionCard(data) {
     <div class="conclusion-head"><strong>${t("dataInterpretation")}</strong><span>${conclusion.cached ? t("cachedConclusion") : t("generatedFromEvidence")}</span></div>
     <h3>${escapeHtml(content.headline)}</h3>
     <p>${escapeHtml(content.summary)}</p>
+    ${missingDimensions ? `<div class="conclusion-missing"><strong>${t("conclusionMissingDimensions")}</strong><span>${escapeHtml(missingDimensions)}</span></div>` : ""}
     ${reasons ? `<ul>${reasons}</ul>` : ""}
     ${alternatives ? `<details><summary>${t("alternatives")}</summary><ul>${alternatives}</ul></details>` : ""}
     ${supportingEvidence ? `<details class="conclusion-supporting-evidence"><summary>${t("staticEvidence")}</summary><ul>${supportingEvidence}</ul></details>` : ""}
@@ -1550,6 +1552,25 @@ function resultKind(data) {
   return t("recommendation");
 }
 
+function conclusionMissingDimensions(content) {
+  if (content?.status !== "insufficient_evidence") return "";
+  const labels = {
+    build_performance: "dimensionBuildPerformance",
+    core_item_tendency: "dimensionCoreItemTendency",
+    sample_risk: "dimensionSampleRisk",
+    item_performance_ranking: "dimensionItemPerformanceRanking",
+    metric_reliability: "dimensionMetricReliability",
+    target_item_performance: "dimensionTargetItemPerformance",
+    ranking_context: "dimensionRankingContext",
+    emblem_performance_ranking: "dimensionEmblemPerformanceRanking",
+    comparison_result: "dimensionComparisonResult",
+    comparison_metrics: "dimensionComparisonMetrics"
+  };
+  return [...new Set(content.missingDimensions ?? [])]
+    .map((dimension) => labels[dimension] ? t(labels[dimension]) : String(dimension))
+    .join("、");
+}
+
 function renderCompAnalysis(data) {
   const analysis = data.analysis ?? {};
   const answer = analysis.answer ?? {};
@@ -1639,9 +1660,11 @@ function chatCoreScopeText(data) {
 function generatedConclusionText(conclusion) {
   const content = conclusion?.content;
   if (!content) return "";
+  const missingDimensions = conclusionMissingDimensions(content);
   return [
     content.headline,
     content.summary,
+    missingDimensions ? `${t("conclusionMissingDimensions")}：${missingDimensions}` : null,
     ...(content.reasons ?? []).map((reason) => reason?.text),
     ...(content.alternatives ?? []).map((alternative) => alternative?.text),
     content.nextAction,

@@ -510,7 +510,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .conclusion-supporting-evidence li span { overflow-wrap: anywhere; }
 .conclusion-supporting-evidence li small { color: var(--muted); overflow-wrap: anywhere; }
 .conclusion-action { min-width: 0; padding: 9px 10px; display: grid; gap: 3px; border-radius: 9px; background: #fff; }
-.conclusion-action span, .conclusion-risk, .conclusion-footer small { min-width: 0; overflow-wrap: anywhere; }
+.conclusion-action span, .conclusion-risk, .conclusion-missing, .conclusion-footer small { min-width: 0; overflow-wrap: anywhere; }
+.conclusion-missing { display: flex; gap: 6px; padding: 8px 9px; border-radius: 8px; color: #985b12; background: #fff4df; font-size: 11px; line-height: 1.55; }
 .conclusion-risk { padding: 8px 9px; border-radius: 8px; color: #985b12; background: #fff4df; font-size: 11px; line-height: 1.55; }
 .conclusion-footer { align-items: flex-end; }
 .conclusion-footer small { color: var(--muted); font-size: 9px; }

@@ -22,7 +22,7 @@ test("conclusion provider config is off by default and missing configuration sta
   const missing = resolveConclusionProviderConfig({ mode: "on", provider: "openai_compatible" }, {});
   assert.equal(missing.enabled, false);
   assert.ok(missing.missing.includes("TFT_AGENT_CONCLUSION_MODEL"));
-  assert.equal(missing.maxCorrections, 3);
+  assert.equal(missing.maxCorrections, 2);
 });
 
 test("OpenAI-compatible conclusion provider sends only the evidence request and parses strict JSON", async () => {
@@ -43,7 +43,7 @@ test("OpenAI-compatible conclusion provider sends only the evidence request and 
   assert.equal(body.messages[1].content, JSON.stringify(evidence));
   assert.equal(request.init.headers.authorization, "Bearer secret-key");
   assert.doesNotMatch(request.init.body, /secret-key|provider\.example/u);
-  assert.equal(body.max_tokens, 350);
+  assert.equal(body.max_tokens, 1600);
   assert.equal(body.max_completion_tokens, undefined);
   assert.equal(body.response_format.type, "json_object");
 });
@@ -68,7 +68,7 @@ test("GPT-5 conclusion config uses a minimal reasoning budget and completion-tok
     }
   });
   await provider({ evidence: {} });
-  assert.equal(body.max_completion_tokens, 350);
+  assert.equal(body.max_completion_tokens, 1600);
   assert.equal(body.max_tokens, undefined);
   assert.equal(body.reasoning_effort, "minimal");
   assert.equal(body.response_format.type, "json_schema");
@@ -105,7 +105,7 @@ test("DeepSeek conclusion config can disable thinking without sending reasoning 
   await provider({ evidence: {} });
   assert.deepEqual(body.thinking, { type: "disabled" });
   assert.equal(body.reasoning_effort, undefined);
-  assert.equal(body.max_tokens, 350);
+  assert.equal(body.max_tokens, 1600);
   assert.equal(body.response_format.type, "json_object");
 });
 

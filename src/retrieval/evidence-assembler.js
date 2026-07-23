@@ -110,9 +110,9 @@ function criticalErrors(legacy) {
       if (!stats || !Number.isFinite(Number(stats.games))) errors.push(`missing_games:${record?.evidenceId ?? "unknown"}`);
     }
   }
-  if (intent === "unit_item_comparison" && array(legacy?.comparison?.options).length < 2) {
-    errors.push("missing_comparison_options");
-  }
+  // A requested comparison with only one observed option is incomplete evidence,
+  // not an unsafe evidence pack. The conclusion contract keeps both comparison
+  // dimensions required so the model must return `insufficient_evidence`.
   if (intent === "comp_trends") {
     for (const record of recommendations) {
       if (!Number.isFinite(Number(record?.trend?.placementImprovement ?? record?.trend?.avgPlacementChange))) {

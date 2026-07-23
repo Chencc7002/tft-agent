@@ -1387,6 +1387,27 @@ export class SQLiteCacheStore {
     return row ? rowToQueryEvent(row) : null;
   }
 
+  updateQueryEventConclusion(queryId, conclusion) {
+    const current = this.getQueryEvent(queryId);
+    if (!current) return null;
+    const response = cloneValue(current.response ?? {});
+    response.answer = {
+      ...(response.answer ?? {}),
+      generatedConclusion: cloneValue(conclusion ?? null)
+    };
+    bindRun(this.database.prepare(`
+      UPDATE query_events
+      SET response_json = ?, llm_used = ?, llm_model = ?
+      WHERE query_id = ?
+    `), [
+      JSON.stringify(response),
+      conclusion?.status === "generated" ? 1 : 0,
+      conclusion?.model ?? current.llmModel ?? null,
+      String(queryId ?? "")
+    ]);
+    return this.getQueryEvent(queryId);
+  }
+
   pruneQueryEventsBefore(createdBefore) {
     return Number(bindRun(this.database.prepare(
       "DELETE FROM query_events WHERE created_at < ?"

@@ -1,4 +1,5 @@
 import { normalizeCompsData, normalizeExplorerRows } from "./metatft-response-adapter.js";
+import { createAssetResolver } from "./asset-resolver.js";
 import { TRAITS, UNITS } from "./static-data.js";
 import {
   traitAliasOverrideByApiName,
@@ -9,6 +10,7 @@ import {
 const seedUnitByApiName = new Map(UNITS.map((unit) => [unit.apiName, unit]));
 const seedTraitByFilterId = new Map(TRAITS.map((trait) => [trait.filterId, trait]));
 const seedTraitByApiName = new Map(TRAITS.map((trait) => [trait.apiName, trait]));
+const unitMetadataResolver = createAssetResolver();
 
 function compact(values) {
   return [...new Set(values.filter(Boolean))];
@@ -66,8 +68,11 @@ function unitRecord(apiName, options = {}, dynamicSource = null) {
   const seed = seedUnitByApiName.get(apiName);
   const override = unitAliasOverrideByApiName.get(apiName);
   const token = apiToken(apiName);
+  const metadata = unitMetadataResolver.resolveUnit(apiName);
+  const cost = Number(metadata.cost);
   return {
     apiName,
+    ...(Number.isFinite(cost) && cost > 0 ? { cost } : {}),
     zhName: override?.zhName ?? seed?.zhName ?? null,
     aliases: compact([
       override?.zhName,

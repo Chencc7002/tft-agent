@@ -42,6 +42,18 @@ test("ConclusionSpec Registry fails startup compilation for missing prompts and 
   assert.throws(() => new ConclusionSpecRegistry([{
     ...structuredClone(source), fallback: { renderer: "dynamic_remote_operation" }
   }]), (error) => error.details.some((detail) => /unsupported fallback renderer/u.test(detail)));
+
+  const invalidCondition = structuredClone(source);
+  invalidCondition.conditionalAnswerDimensions = {
+    [invalidCondition.requiredAnswerDimensions[0]]: "when_magic"
+  };
+  assert.throws(() => new ConclusionSpecRegistry([invalidCondition]),
+    (error) => error.details.some((detail) => /unsupported dimension condition/u.test(detail)));
+
+  const undeclaredDimension = structuredClone(source);
+  undeclaredDimension.conditionalAnswerDimensions = { ghost_dimension: "when_low_sample" };
+  assert.throws(() => new ConclusionSpecRegistry([undeclaredDimension]),
+    (error) => error.details.some((detail) => /conditional dimension is not declared/u.test(detail)));
 });
 
 test("disabled ConclusionSpecs never participate in matching", () => {

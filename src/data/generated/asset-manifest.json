@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "source": "Riot Data Dragon",
   "sourcePatch": "16.13.1",
   "generatedAt": "2026-07-11T07:31:51.214Z",
@@ -4818,6 +4818,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Aatrox",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Aatrox_splash_centered_30.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4826,6 +4827,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Akali",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Akali_splash_centered_68.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4834,6 +4836,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_AurelionSol",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_AurelionSol_splash_centered_2.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4842,6 +4845,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Aurora",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Aurora_splash_centered_1.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4850,6 +4854,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Bard",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Bard_splash_centered_8.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4858,6 +4863,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Belveth",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Belveth_splash_centered_19.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4866,6 +4872,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Blitzcrank",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Blitzcrank_splash_uncentered_65.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4874,6 +4881,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Briar",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Briar_splash_centered_10.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4882,6 +4890,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Caitlyn",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Caitlyn_splash_centered_48.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4890,6 +4899,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Chogath",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Chogath_splash_centered_7.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4898,6 +4908,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Corki",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Corki_splash_centered_26.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4914,6 +4925,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Diana",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_DianaSplash_PC.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4930,6 +4942,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Ezreal",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Ezreal_splash_centered_5.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4938,6 +4951,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Fiora",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Fiora_splash_centered_51.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4946,6 +4960,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Fizz",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Fizz_splash_centered_26.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4954,6 +4969,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Galio",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Galio.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4962,6 +4978,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Gnar",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Gnar_splash_centered_15.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4970,6 +4987,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Gragas",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Gragas_splash_centered_10.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4978,6 +4996,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Graves",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Graves_splash_centered_18.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4986,6 +5005,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Gwen",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Gwen_splash_centered_1.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -4994,6 +5014,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Illaoi",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Illaoi_splash_centered_27.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5002,6 +5023,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_IvernMinion",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_IvernMinion_splash_centered_27.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5010,6 +5032,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Jax",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Jax.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5018,6 +5041,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Jhin",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Jhin_splash_centered_37.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5026,6 +5050,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Jinx",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Jinx_splash_centered_38.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5034,6 +5059,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Kaisa",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Kaisa_splash_centered_69.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5042,6 +5068,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Karma",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Karma_splash_centered_8.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5050,6 +5077,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Kindred",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Kindred_splash_centered_23.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5058,6 +5086,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Leblanc",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Leblanc_splash_centered_29.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5066,6 +5095,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Leona",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Leona_splash_centered_64.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5074,6 +5104,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Lissandra",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Lissandra_splash_centered_12.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5082,6 +5113,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Lulu",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Lulu_splash_centered_14.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5090,6 +5122,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Maokai",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Maokai_splash_centered_33.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5098,6 +5131,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_MasterYi",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_MasterYi_splash_centered_33.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5106,6 +5140,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Milio",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Milio_splash_centered_0.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5114,6 +5149,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_MissFortune",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_MissFortune_splash_centered_16.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5122,6 +5158,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_MissFortune_TraitClone",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_MissFortune_splash_centered_16.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5130,6 +5167,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Mordekaiser",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Mordekaiser_splash_centered_6.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5138,6 +5176,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Morgana",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Morgana_splash_centered_50.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5146,6 +5185,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Nami",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Nami_splash_centered_41.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5154,6 +5194,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Nasus",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Nasus_splash_centered_25.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5162,6 +5203,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Nunu",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Nunu_splash_centered_35.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5170,6 +5212,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Ornn",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Ornn_splash_centered_11.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5178,6 +5221,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Pantheon",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Pantheon_splash_centered_16.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5186,6 +5230,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Poppy",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Poppy_splash_centered_16.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5194,6 +5239,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Pyke",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Pyke_splash_centered_25.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5202,6 +5248,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Rammus",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Rammus_splash_centered_17.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5210,6 +5257,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_RekSai",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_RekSai_splash_centered_26.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5218,6 +5266,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Rhaast",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_KaynSplash_Uncentered.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5226,6 +5275,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Riven",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Riven_splash_centered_18.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5234,6 +5284,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Samira",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Samira_splash_centered_10.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5242,6 +5293,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Shen",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_shen_splash_centered_49.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5250,6 +5302,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Sona",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Sona_splash_centered_17.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5258,6 +5311,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_TahmKench",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_TahmKench_splash_centered_11.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5266,6 +5320,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Talon",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Talon_splash_centered_39.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5274,6 +5329,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Teemo",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Teemo_splash_centered_47.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5282,6 +5338,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_TwistedFate",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_TwistedFate_splash_centered_45.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5290,6 +5347,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Urgot",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Urgot_splash_centered_32.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5298,6 +5356,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Veigar",
+      "cost": 1,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Veigar_splash_centered_32.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5306,6 +5365,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Vex",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_vex_splash_centered_10.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5314,6 +5374,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Viktor",
+      "cost": 3,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Viktor_splash_centered_5.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5322,6 +5383,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Xayah",
+      "cost": 4,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Xayah_splash_centered_1.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5330,6 +5392,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Zed",
+      "cost": 5,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Zed_splash_centered_68.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",
@@ -5338,6 +5401,7 @@
     {
       "entityType": "unit",
       "apiName": "TFT17_Zoe",
+      "cost": 2,
       "iconUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/tft-champion/TFT17_Zoe_splash_centered_43.TFT_Set17.png",
       "source": "Riot Data Dragon",
       "sourcePatch": "16.13.1",

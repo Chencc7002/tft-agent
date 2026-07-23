@@ -59,6 +59,6 @@
   "riskNotice": null
 }
 
-`status` 只能是 `ok` 或 `insufficient_evidence`。`status=ok` 时必须覆盖全部 `requiredAnswerDimensions`，且 `missingDimensions`/`missingEvidence` 为空。证据不足时必须返回 `insufficient_evidence`，列明已经回答和缺失的维度，并在 `missingEvidence` 中给出每个缺失维度需要的证据类型；不得用其他维度替代。`riskNotice` 没有风险时为 `null`，有风险时为简短字符串。
+`status` 只能是 `ok` 或 `insufficient_evidence`。`status=ok` 时必须覆盖全部 `requiredAnswerDimensions`，且 `missingDimensions`/`missingEvidence` 为空。`allowedAnswerDimensions` 是本次合同允许回答的完整维度集合；可以回答其中未列入 `requiredAnswerDimensions` 的可选维度，但仍必须提供满足该维度要求的证据。不得输出允许集合之外的维度。证据不足时必须返回 `insufficient_evidence`，列明已经回答和缺失的必答维度，并在 `missingEvidence` 中给出每个缺失维度需要的证据类型；不得用其他维度替代。`riskNotice` 没有风险时为 `null`，有风险时为简短字符串。
 
-`addressedDimensions` 必须与 `reasons` 和 `alternatives` 中实际出现的不同 `dimension` 完全一致。每个已回答维度至少要有一条带对应 Evidence ID 的 `reasons` 或 `alternatives`；不得只在 `summary`、`nextAction` 或 `riskNotice` 中提到该维度。特别是 `sample_risk` 即使已经写入 `riskNotice`，仍必须保留一条 `dimension="sample_risk"` 的结构化条目并绑定样本证据。
+`addressedDimensions` 必须与 `reasons` 和 `alternatives` 中实际出现的不同 `dimension` 完全一致。每个已回答维度至少要有一条带对应 Evidence ID 的 `reasons` 或 `alternatives`；不得只在 `summary`、`nextAction` 或 `riskNotice` 中提到该维度。只有当 `sample_risk` 出现在本次合同的 `requiredAnswerDimensions` 中时才必须回答；如果回答了可选的 `sample_risk`，即使风险已写入 `riskNotice`，仍必须保留一条 `dimension="sample_risk"` 的结构化条目并绑定样本证据。

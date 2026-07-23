@@ -246,6 +246,13 @@ export {
   serializeConclusionEvidence
 } from "./llm/conclusion-evidence.js";
 export {
+  CONCLUSION_DIMENSION_CONDITIONS,
+  CONCLUSION_REQUIREMENT_CONTEXT_VERSION,
+  deriveConclusionRequirementContext,
+  isLowSampleStats,
+  resolveConclusionRequirements
+} from "./llm/conclusion-requirements.js";
+export {
   CONCLUSION_ERROR_CATEGORIES,
   CONCLUSION_SCHEMA_VERSION,
   CONCLUSION_VALIDATION_FEEDBACK_SCHEMA_VERSION,

@@ -2043,10 +2043,10 @@ export async function prewarmSmallWindowCatalog(runtime) {
   };
 }
 
-function quotaWrappedCallable(callable, accessService, visitor) {
+function quotaWrappedCallable(callable, accessService, visitor, reserveForRequest = null) {
   if (!callable || !accessService?.config?.enabled) return callable;
   const wrapped = async (...args) => {
-    accessService.reserveLlmUse(visitor);
+    (reserveForRequest ?? (() => accessService.reserveLlmUse(visitor)))();
     return callable(...args);
   };
   Object.assign(wrapped, callable);
@@ -2104,10 +2104,17 @@ function createConclusionJob(runtime, options, scope = null) {
       this.promise = Promise.resolve()
         .then(() => generateEvidenceBackedConclusion(options))
         .catch((error) => conclusionFallback(error, options.config?.model ?? options.provider?.model ?? null))
-        .then((conclusion) => {
+        .then(async (conclusion) => {
           this.conclusion = conclusion;
           this.status = "complete";
           this.updatedAt = Date.now();
+          if (this.queryId) {
+            try {
+              await runtime.cacheStore?.updateQueryEventConclusion?.(this.queryId, conclusion);
+            } catch (error) {
+              this.persistenceError = error?.code ?? error?.message ?? "query_event_update_failed";
+            }
+          }
           return conclusion;
         });
       return this.promise;
@@ -2228,6 +2235,10 @@ async function persistQueryResponse(payload, runtime, details = {}) {
     llmModel: conclusion?.model ?? null,
     durationMs: Date.now() - details.startedAt
   });
+  if (conclusion?.status === "pending" && conclusion.jobId) {
+    const job = runtime.conclusionJobs?.get(conclusion.jobId);
+    if (job) job.queryId = queryId;
+  }
 
   const retentionDays = Number(runtime.queryEventRetentionDays ?? 30);
   const now = Date.now();
@@ -2244,11 +2255,27 @@ export async function handleRecommendRequest(body, runtime, context = {}) {
   const input = String(body?.input ?? "").trim();
   const conversationId = String(body?.conversationId ?? body?.conversation_id ?? "").trim() || "default";
   const scope = context.visitor?.scope ?? null;
+  let llmUseReserved = false;
+  const reserveLlmUseForRequest = () => {
+    if (llmUseReserved) return;
+    context.accessService.reserveLlmUse(context.visitor);
+    llmUseReserved = true;
+  };
   const requestRuntime = context.accessService?.config?.enabled
     ? {
       ...runtime,
-      structuredParser: quotaWrappedCallable(runtime.structuredParser, context.accessService, context.visitor),
-      conclusionProvider: quotaWrappedCallable(runtime.conclusionProvider, context.accessService, context.visitor)
+      structuredParser: quotaWrappedCallable(
+        runtime.structuredParser,
+        context.accessService,
+        context.visitor,
+        reserveLlmUseForRequest
+      ),
+      conclusionProvider: quotaWrappedCallable(
+        runtime.conclusionProvider,
+        context.accessService,
+        context.visitor,
+        reserveLlmUseForRequest
+      )
     }
     : runtime;
   if (!input) {
