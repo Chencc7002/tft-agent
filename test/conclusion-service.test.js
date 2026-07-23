@@ -89,7 +89,7 @@ test("conclusion service falls back on invalid output without changing the recom
   });
   assert.equal(conclusion.status, "fallback");
   assert.equal(conclusion.reason, "invalid_output");
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.deepEqual(result, before);
 });
 
@@ -295,6 +295,6 @@ test("conclusion cache keys isolate evidence, model, base prompt and the selecte
     conclusionSpec: { ...versionedEvidence.conclusionSpec, version: 2 }
   }, { model: "model-a" }), versionedBaseline);
   assert.notEqual(makeConclusionCacheKey(versionedEvidence, {
-    model: "model-a", validatorVersion: "conclusion-validator.v6"
+    model: "model-a", validatorVersion: "conclusion-validator.v7"
   }), versionedBaseline);
 });

@@ -84,7 +84,10 @@ test("all emblem-ranking synonyms resolve to one intent without asking for a nam
     "剑圣哪个转职好",
     "剑圣有什么强的转职",
     "剑圣应该带什么转",
-    "易大师适合什么纹章"
+    "易大师适合什么纹章",
+    "推荐剑圣转职",
+    "剑圣转职推荐",
+    "转职排行里推荐剑圣"
   ]) {
     const resolved = resolveUnitRequest(input);
     assert.equal(resolved.parsed.intent, "unit_emblem_rankings", input);
@@ -132,7 +135,7 @@ test("pipeline stops repeated semantic validation errors and exposes template fa
   assert.equal(result.status, "deterministic_fallback");
   assert.equal(result.conclusion.status, "fallback");
   assert.equal(result.conclusion.reason, "invalid_output");
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.equal(result.conclusion.validationFeedback.errors[0].category, "unsupported_number");
 });
 

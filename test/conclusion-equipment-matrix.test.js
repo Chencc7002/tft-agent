@@ -131,24 +131,38 @@ test("every catalog hero can build a validated conclusion for artifact, radiant,
 
   for (const unit of catalog.units) {
     for (const category of ["artifact", "radiant", "emblem"]) {
-      const categoryText = {
-        artifact: "神器排行",
-        radiant: "光明装备排行",
-        emblem: "哪个转职好"
+      const categoryInputs = {
+        artifact: [
+          `${unit.zhName}神器排行`,
+          `推荐${unit.zhName}神器`,
+          `${unit.zhName}神器推荐`
+        ],
+        radiant: [
+          `${unit.zhName}光明装备排行`,
+          `推荐${unit.zhName}光明装备`,
+          `${unit.zhName}光明装推荐`
+        ],
+        emblem: [
+          `${unit.zhName}哪个转职好`,
+          `推荐${unit.zhName}转职`,
+          `${unit.zhName}转职排行`
+        ]
       }[category];
-      const parsed = parseQuery(`${unit.zhName}${categoryText}`, { catalog });
-      assert.equal(parsed.unit, unit.apiName, `${unit.apiName}/${category}: parser unit`);
-      assert.equal(
-        parsed.intent,
-        category === "emblem" ? "unit_emblem_rankings" : "unit_item_rankings",
-        `${unit.apiName}/${category}: parser intent`
-      );
-      assert.ok(parsed.itemCategories.includes(category), `${unit.apiName}/${category}: parser category`);
+      for (const input of categoryInputs) {
+        const parsed = parseQuery(input, { catalog });
+        assert.equal(parsed.unit, unit.apiName, `${unit.apiName}/${category}/${input}: parser unit`);
+        assert.equal(
+          parsed.intent,
+          category === "emblem" ? "unit_emblem_rankings" : "unit_item_rankings",
+          `${unit.apiName}/${category}/${input}: parser intent`
+        );
+        assert.ok(parsed.itemCategories.includes(category), `${unit.apiName}/${category}/${input}: parser category`);
+      }
 
       const conclusion = await generateEvidenceBackedConclusion({
         result: rankingResult(unit, category),
         catalog,
-        input: `${unit.zhName ?? unit.apiName}的${category}排行`,
+        input: categoryInputs[0],
         config: { enabled: true, model: "matrix-provider", maxCorrections: 0 },
         provider: async ({ evidence }) => validProviderOutput(evidence)
       });
