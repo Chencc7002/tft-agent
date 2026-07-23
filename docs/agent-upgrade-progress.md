@@ -2,11 +2,11 @@
 
 ## Current
 
-- phase: 1
+- phase: 2
 - status: completed
 - branch: codex/wechat-mobile-chat
 - baseline_commit: d9416b0
-- latest_verified_commit: bfcaa5e
+- latest_verified_commit: 2d16226
 
 ## Completed gates
 
@@ -20,11 +20,16 @@
 - metrics: `core-agent-cases.v1` — 50 passed / 0 failed / 0 skipped; task, intent, clarification, tool selection and tool input validity 100%; expected fallback 4%; expected timeout 2%
 - report: `docs/reports/phase-1-agent-runtime.md`, `docs/reports/phase-1-agent-runtime.json`
 
+- phase: 2
+- tests: final `npm test` — 589 total / 569 passed / 0 failed / 20 skipped; targeted TaskFrame/parser/context/shadow — 10 passed / 0 failed / 0 skipped
+- metrics: `natural-language-agent-phase0.v1` — action 96.00%; domain 97.67%; unsupported understanding 100%; input/output/latency budgets 100%
+- report: `docs/reports/phase-2-semantic-parser.md`, `docs/reports/phase-2-semantic-parser.json`
+
 ## Current work
 
-- objective: phase 1 complete; preserve its gates and prepare to start phase 2 only when requested
-- files: `src/agent/`, production retrieval/recommendation/server/store integration, `eval/`, tests, architecture and phase reports
-- assumptions: existing deterministic business rules remain authoritative; the untracked master-plan file remains user-owned and untouched
+- objective: phase 2 complete; preserve its shadow-only behavior and begin phase 3 entity/concept linking
+- files: `src/understanding/`, semantic shadow integration, phase-2 evaluation, tests, protocol and phase reports
+- assumptions: existing deterministic business rules and IntentEnvelope remain authoritative; the untracked master-plan file remains user-owned and untouched
 
 ## Blockers
 
@@ -34,5 +39,5 @@
 
 ## Next
 
-- next_step: phase 2 — implement `task-frame.v1` Schema and shadow Semantic Task Parser while keeping the old parser authoritative
-- required_checks: phase 2 action/domain accuracy gates, shadow-result compatibility, token/latency budget, context-compression retention, full regression and updated offline reports
+- next_step: phase 3 — separate canonical entity and game-concept linking from semantic action parsing while reusing current aliases, pinyin, fuzzy candidates, semantic retrieval and current-patch catalog
+- required_checks: current-patch core entity Top-1 at least 97%, slang/alias Top-3 recall at least 98%, nonexistent false-hit rate below 2%, full regression and updated offline reports
