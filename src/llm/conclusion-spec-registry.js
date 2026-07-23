@@ -4,7 +4,7 @@ import { CONCLUSION_DIMENSION_CONDITIONS } from "./conclusion-requirements.js";
 
 export const CONCLUSION_SPEC_SCHEMA_VERSION = "conclusion-spec.v2";
 export const CONCLUSION_SPEC_REGISTRY_VERSION = "conclusion-spec-registry.v2";
-export const CONCLUSION_VALIDATOR_VERSION = "conclusion-validator.v4";
+export const CONCLUSION_VALIDATOR_VERSION = "conclusion-validator.v5";
 
 const VALID_EVIDENCE_REQUIREMENTS = new Set([
   "visible_builds", "visible_items", "visible_emblems", "visible_comps", "visible_trends",
@@ -114,7 +114,7 @@ const RAW_SPECS = [
   spec({
     id: "unit_item_rankings.default", intent: "unit_item_rankings",
     version: 2,
-    prompt: prompt("unit-item-rankings", "unit-item-rankings.v3", "unit-item-rankings.md"),
+    prompt: prompt("unit-item-rankings", "unit-item-rankings.v4", "unit-item-rankings.md"),
     requiredAnswerDimensions: ["item_performance_ranking", "metric_reliability", "sample_risk"],
     requiredEvidence: {
       item_performance_ranking: ITEM_EVIDENCE, metric_reliability: ["coverage", "games"], sample_risk: ["sample_status"]
@@ -125,7 +125,7 @@ const RAW_SPECS = [
   spec({
     id: "unit_item_rankings.item_performance", intent: "unit_item_rankings", questionType: "item_performance",
     version: 2,
-    prompt: prompt("unit-item-rankings", "unit-item-rankings.v3", "unit-item-rankings.md"),
+    prompt: prompt("unit-item-rankings", "unit-item-rankings.v4", "unit-item-rankings.md"),
     requiredAnswerDimensions: ["target_item_performance", "ranking_context", "sample_risk"],
     requiredEvidence: {
       target_item_performance: ["target_item", "games", "avgPlacement", "top4Rate", "winRate"],
@@ -136,7 +136,7 @@ const RAW_SPECS = [
   spec({
     id: "unit_emblem_rankings.default", intent: "unit_emblem_rankings",
     version: 2,
-    prompt: prompt("unit-emblem-rankings", "unit-emblem-rankings.v2", "unit-emblem-rankings.md"),
+    prompt: prompt("unit-emblem-rankings", "unit-emblem-rankings.v3", "unit-emblem-rankings.md"),
     requiredAnswerDimensions: ["emblem_performance_ranking", "metric_reliability", "sample_risk"],
     requiredEvidence: {
       emblem_performance_ranking: ["visible_emblems", "games", "avgPlacement", "top4Rate", "winRate"],

@@ -103,7 +103,10 @@ function hasEvidence(result, type) {
   if (type === "comp_rankings") return Object.values(result?.rankings ?? {}).some((records) => records?.length);
   if (type === "comp_trends") return Boolean(result?.improving?.length);
   if (type === "comp_analysis") return Boolean(result?.analysis?.target && result?.analysis?.evidencePack?.length);
-  if (type === "unit_item_rankings" || type === "unit_emblem_rankings") return Boolean(result?.itemRankings?.length);
+  if (type === "unit_item_rankings" || type === "unit_emblem_rankings") {
+    return Boolean(result?.itemRankings?.length)
+      || (Array.isArray(result?.itemRankings) && Boolean(result?.itemRankingMethodology));
+  }
   if (type === "unit_item_comparison") return Boolean(result?.comparison?.entries?.length);
   return Boolean(result?.rankedBuilds?.length);
 }

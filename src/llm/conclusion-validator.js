@@ -1124,16 +1124,18 @@ export function validateConclusionOutput(rawValue, evidence, options = {}) {
   const combined = [headline, summary, nextAction, riskNotice, ...reasons.map((entry) => entry.text), ...alternatives.map((entry) => entry.text)].filter(Boolean).join("\n");
   const contractFields = validateQuestionContractBinding(rawValue, [...reasons, ...alternatives], evidence, errors);
   validateQuestionFocus([...reasons, ...alternatives], combined, evidence, errors);
-  if (rawValue.status === "ok" && evidence?.generationRules?.mustAnalyzeAllDisplayedItemRankings) {
+  if (rawValue.status === "ok" && evidence?.generationRules?.mustAnalyzeRepresentativeItemRankings) {
     const referencedIds = new Set([...reasons, ...alternatives].flatMap((entry) => entry.evidenceIds));
-    const missing = (evidence?.recommendations ?? []).filter((record) => {
+    const requiredIds = evidence?.itemRankingContext?.directAnalysisEvidenceIds ?? [];
+    const missing = requiredIds.map((evidenceId) => records.get(evidenceId)).filter((record) => {
+      if (!record) return false;
       if (referencedIds.has(record.evidenceId)) return false;
       return ![record?.item?.name, record?.item?.apiName]
         .filter(Boolean)
         .some((name) => combined.includes(name));
     });
     if (missing.length > 0) {
-      errors.push(`item-ranking conclusion omits displayed evidence: ${missing.map((record) => record.evidenceId).join(", ")}`);
+      errors.push(`item-ranking conclusion omits representative evidence: ${missing.map((record) => record.evidenceId).join(", ")}`);
     }
   }
   if (rawValue.status === "ok" && evidence?.generationRules?.mustAnalyzeDisplayedCompRankings) {

@@ -387,7 +387,7 @@ test("validateConclusionOutput links every named candidate in a cross-ranking co
   assert.match(result.value.reasons[1].text, /832场|前四率63\.3%|平均名次3\.78/u);
 });
 
-test("validateConclusionOutput rejects item-ranking conclusions that omit a displayed candidate", () => {
+test("validateConclusionOutput requires the ranking leader and highest-sample representative without forcing every candidate", () => {
   const names = itemEvidence.recommendations.map((entry) => entry.item.name);
   const value = {
     schemaVersion: "llm_conclusion.v1",
@@ -400,8 +400,15 @@ test("validateConclusionOutput rejects item-ranking conclusions that omit a disp
     riskNotice: `${names[0]}是低样本结果。`
   };
   const result = validateConclusionOutput(value, itemEvidence, { catalog });
-  assert.equal(result.valid, false);
-  assert.match(result.errors.join("\n"), /omits displayed evidence: item:2/u);
+  assert.equal(result.valid, true, result.errors.join("\n"));
+
+  const missingRepresentative = structuredClone(value);
+  missingRepresentative.summary = `${names[0]}属于低样本亮点，${names[2]}与${names[4]}提供了更高样本的参考。`;
+  missingRepresentative.reasons = [{ evidenceIds: ["item:3"], text: `${names[2]}样本832局。` }];
+  missingRepresentative.nextAction = `优先参考${names[2]}。`;
+  const invalid = validateConclusionOutput(missingRepresentative, itemEvidence, { catalog });
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join("\n"), /omits representative evidence: item:4/u);
 });
 
 test("validateConclusionOutput requires comp conclusions to cover displayed evidence", () => {

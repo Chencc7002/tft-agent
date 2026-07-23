@@ -102,7 +102,11 @@ function criticalErrors(legacy) {
   const errors = [];
   const intent = legacy?.request?.intent;
   const recommendations = array(legacy?.recommendations);
-  if (recommendations.length === 0) errors.push("no_visible_structured_candidates");
+  const completedEmptyItemRanking = ["unit_item_rankings", "unit_emblem_rankings"].includes(intent)
+    && legacy?.itemRankingContext?.displayedCount === 0;
+  if (recommendations.length === 0 && !completedEmptyItemRanking) {
+    errors.push("no_visible_structured_candidates");
+  }
   for (const record of recommendations) {
     if (!record?.evidenceId) errors.push("missing_evidence_id");
     const stats = record?.stats;

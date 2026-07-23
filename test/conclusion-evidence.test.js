@@ -107,7 +107,8 @@ test("item-ranking evidence mirrors every candidate and detail displayed by the 
   assert.deepEqual(evidence.itemRankingContext.stableEvidenceIds, ["item:3", "item:4", "item:5"]);
   assert.deepEqual(evidence.itemRankingContext.stableTopHalfEvidenceIds, ["item:3", "item:4"]);
   assert.deepEqual(evidence.itemRankingContext.stableBottomHalfEvidenceIds, ["item:5"]);
-  assert.equal(evidence.generationRules.mustAnalyzeAllDisplayedItemRankings, true);
+  assert.deepEqual(evidence.itemRankingContext.directAnalysisEvidenceIds, ["item:1", "item:4"]);
+  assert.equal(evidence.generationRules.mustAnalyzeRepresentativeItemRankings, true);
   assert.equal(evidence.generationRules.mustDistinguishMetricRankFromReliability, true);
 });
 
