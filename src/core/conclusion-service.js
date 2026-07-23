@@ -19,7 +19,7 @@ import {
   validateConclusionOutput
 } from "../llm/conclusion-validator.js";
 
-export const DEFAULT_CONCLUSION_MAX_CORRECTIONS = 3;
+export const DEFAULT_CONCLUSION_MAX_CORRECTIONS = 2;
 export const DEFAULT_CONCLUSION_MAX_VALIDATION_ERRORS = 8;
 export const DEFAULT_CONCLUSION_MAX_TRANSPORT_RETRIES = 1;
 
@@ -64,6 +64,7 @@ function envelope(status, options = {}) {
     corrections: Math.max(0, Number(options.corrections ?? 0)),
     transportRetries: Math.max(0, Number(options.transportRetries ?? 0)),
     ...(options.cached ? { cached: true } : {}),
+    ...(options.error ? { error: String(options.error) } : {}),
     ...(options.supportingEvidence?.length ? { supportingEvidence: options.supportingEvidence } : {}),
     ...(options.validationFeedback ? { validationFeedback: options.validationFeedback } : {}),
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {})
@@ -206,14 +207,8 @@ function validationIssueText(raw, path) {
 
 function conclusionCorrectionPolicy(validation, raw, evidence, catalog) {
   const hardCategories = new Set([
-    "missing_answer_dimension",
-    "unsupported_answer_dimension",
-    "dimension_without_evidence",
-    "missing_coverage",
     "unsupported_causal_claim",
-    "analysis_boundary",
-    "current_fact_used_as_history",
-    "question_focus_mismatch"
+    "current_fact_used_as_history"
   ]);
   let ambiguousCitation = false;
   for (const issue of validation?.issues ?? []) {
@@ -390,6 +385,7 @@ export async function generateEvidenceBackedConclusion({
         const reason = providerFailureReason(error);
         const value = envelope("fallback", {
           reason,
+          error: error?.code ?? error?.name ?? "provider_error",
           model,
           latencyMs: Date.now() - startedAt,
           attempts,

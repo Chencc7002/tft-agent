@@ -55,6 +55,9 @@ function records(data, entityType, predicate) {
     entityType,
     apiName: entry.id,
     ...(entityType === "trait" ? { filterId: entry.id } : {}),
+    ...(entityType === "unit" && Number.isFinite(Number(entry.cost)) && Number(entry.cost) > 0
+      ? { cost: Number(entry.cost) }
+      : {}),
     iconUrl: `https://ddragon.leagueoflegends.com/cdn/${patch}/img/${entry.image.group}/${encodeURIComponent(entry.image.full)}`,
     source: "Riot Data Dragon",
     sourcePatch: patch,
@@ -69,7 +72,7 @@ const assets = [
 ].sort((a, b) => a.entityType.localeCompare(b.entityType) || a.apiName.localeCompare(b.apiName));
 
 const manifest = {
-  version: 1,
+  version: 2,
   source: "Riot Data Dragon",
   sourcePatch: patch,
   generatedAt: new Date().toISOString(),

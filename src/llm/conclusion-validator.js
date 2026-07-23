@@ -593,7 +593,11 @@ function recordMatchesRequirement(record, requirement, evidence) {
   }
   if (requirement === "visible_items" || requirement === "visible_emblems") return id.startsWith("item:");
   if (requirement === "visible_comps" || requirement === "visible_trends") return id.startsWith("comp:");
-  if (requirement === "comparison_options" || requirement === "exclusive_samples" || requirement === "winner") return id.startsWith("comparison:");
+  if (requirement === "comparison_options" || requirement === "exclusive_samples") {
+    const optionCount = [...evidenceRecords(evidence).keys()].filter((evidenceId) => evidenceId.startsWith("comparison:")).length;
+    return optionCount >= 2 && id.startsWith("comparison:");
+  }
+  if (requirement === "winner") return id.startsWith("comparison:");
   if (requirement === "target_item") {
     const target = evidence?.questionContract?.targets?.items?.[0] ?? evidence?.query?.performanceItem?.apiName;
     return Boolean(target && (record?.item?.apiName === target || record?.apiName === target));
@@ -617,7 +621,8 @@ function validateQuestionContractBinding(rawValue, entries, evidence, errors) {
   const contract = evidence?.questionContract;
   if (!contract) return { addressedDimensions: [], missingDimensions: [], missingEvidence: [] };
   if (rawValue.contractId !== contract.contractId) errors.push("contract_id_mismatch: output.contractId does not match Question Contract");
-  const allowed = new Set(contract.requiredAnswerDimensions ?? []);
+  const allowed = new Set(contract.allowedAnswerDimensions ?? contract.requiredAnswerDimensions ?? []);
+  const required = new Set(contract.requiredAnswerDimensions ?? []);
   const addressedDimensions = readStringArray(rawValue.addressedDimensions, "addressedDimensions", errors);
   const missingDimensions = readStringArray(rawValue.missingDimensions, "missingDimensions", errors);
   const missingEvidence = Array.isArray(rawValue.missingEvidence) ? rawValue.missingEvidence.map((entry, index) => {
@@ -649,7 +654,7 @@ function validateQuestionContractBinding(rawValue, entries, evidence, errors) {
       errors.push(`current_fact_used_as_history: ${entry.dimension}`);
     }
   }
-  const allRequired = [...allowed];
+  const allRequired = [...required];
   if (rawValue.status === "ok") {
     for (const dimension of allRequired) {
       if (!addressedDimensions.includes(dimension)) errors.push(`missing_answer_dimension: ${dimension}`);

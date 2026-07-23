@@ -1,5 +1,6 @@
 import { requiredCoreItemAppearances } from "../core/core-item-frequency.js";
 import { CONCLUSION_SPEC_REGISTRY, deriveConclusionQuestionType } from "./conclusion-spec-registry.js";
+import { isLowSampleStats } from "./conclusion-requirements.js";
 
 export const CONCLUSION_EVIDENCE_SCHEMA_VERSION = "llm_conclusion_evidence.v1";
 export const MAX_CONCLUSION_EVIDENCE_BYTES = 32 * 1024;
@@ -60,12 +61,6 @@ function statsRecord(stats = {}) {
     avgPlacement: finite(stats.avgPlacement),
     ...(finite(stats.pickRate) !== null ? { pickRate: finite(stats.pickRate) } : {})
   };
-}
-
-function lowSampleFor(stats, query = {}) {
-  const configured = Number(query.minSamples ?? 100);
-  const minSamples = Number.isFinite(configured) && configured > 0 ? configured : 100;
-  return Number(stats?.games ?? 0) < Math.max(200, minSamples * 2);
 }
 
 function sourceState(result) {
@@ -152,7 +147,7 @@ function buildPreferenceChanges(previousQuery, currentQuery, catalog) {
 
 function buildRecommendations(result, catalog) {
   return asArray(result?.rankedBuilds).slice(0, 3).map((build, index) => {
-    const lowSample = Boolean(build.lowSample || build.comparisonStable === false || lowSampleFor(build.stats, result?.query));
+    const lowSample = Boolean(build.lowSample || build.comparisonStable === false || isLowSampleStats(build.stats, result?.query));
     return {
       evidenceId: `build:${index + 1}`,
       rank: index + 1,
@@ -210,7 +205,7 @@ function buildItemSignals(recommendations) {
 
 function buildItemRankings(result, catalog) {
   return asArray(result?.itemRankings).slice(0, 5).map((entry, index) => {
-    const lowSample = Boolean(entry.lowSample || lowSampleFor(entry.stats, result?.query));
+    const lowSample = Boolean(entry.lowSample || isLowSampleStats(entry.stats, result?.query));
     return {
       evidenceId: `item:${index + 1}`,
       rank: index + 1,

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { validateIntentEnvelope } from "../retrieval/contracts.js";
+import { resolveConclusionRequirements } from "./conclusion-requirements.js";
 
-export const QUESTION_CONTRACT_SCHEMA_VERSION = "question-contract.v1";
-export const QUESTION_CONTRACT_FINGERPRINT_VERSION = "question-contract-fingerprint.v1";
+export const QUESTION_CONTRACT_SCHEMA_VERSION = "question-contract.v2";
+export const QUESTION_CONTRACT_FINGERPRINT_VERSION = "question-contract-fingerprint.v2";
 
 function array(value) {
   return Array.isArray(value) ? value : [];
@@ -83,13 +84,18 @@ export function validateQuestionContract(value) {
     if (!Array.isArray(value?.targets?.[key])) errors.push(`targets.${key} must be an array`);
   }
   if (!Array.isArray(value?.requiredAnswerDimensions) || value.requiredAnswerDimensions.length === 0) errors.push("requiredAnswerDimensions must not be empty");
-  if (!value?.requiredEvidence || typeof value.requiredEvidence !== "object") errors.push("requiredEvidence is required");
+  if (!Array.isArray(value?.allowedAnswerDimensions) || value.allowedAnswerDimensions.length === 0) errors.push("allowedAnswerDimensions must not be empty");
   for (const dimension of value?.requiredAnswerDimensions ?? []) {
+    if (!value?.allowedAnswerDimensions?.includes(dimension)) errors.push(`required dimension is not allowed: ${dimension}`);
+  }
+  if (!value?.requiredEvidence || typeof value.requiredEvidence !== "object") errors.push("requiredEvidence is required");
+  for (const dimension of value?.allowedAnswerDimensions ?? []) {
     if (!Array.isArray(value.requiredEvidence?.[dimension]) || value.requiredEvidence[dimension].length === 0) {
       errors.push(`requiredEvidence missing for ${dimension}`);
     }
   }
   if (!Array.isArray(value?.forbiddenClaims)) errors.push("forbiddenClaims must be an array");
+  if (!value?.requirementContext || typeof value.requirementContext !== "object") errors.push("requirementContext is required");
   if (typeof value?.needsClarification !== "boolean") errors.push("needsClarification must be boolean");
   return { valid: errors.length === 0, errors, value: errors.length === 0 ? value : null };
 }
@@ -105,6 +111,7 @@ export function createQuestionContract({
     throw new TypeError("Question Contract requires a validated Query");
   }
   if (!spec || spec.match?.intent !== intentEnvelope.intent) throw new TypeError("Question Contract requires the exact ConclusionSpec");
+  const requirements = resolveConclusionRequirements(spec, result);
   const scope = {
     seasonContextId: String(seasonContextId),
     principal: scopeFingerprint(principalId),
@@ -119,8 +126,10 @@ export function createQuestionContract({
     resultType: String(result?.type ?? query.intent),
     targets: targetValues(result, intentEnvelope),
     constraints: normalizedConstraints(query, intentEnvelope),
-    requiredAnswerDimensions: [...spec.requiredAnswerDimensions],
-    requiredEvidence: stableValue(spec.requiredEvidence),
+    requiredAnswerDimensions: requirements.requiredAnswerDimensions,
+    allowedAnswerDimensions: requirements.allowedAnswerDimensions,
+    requiredEvidence: stableValue(requirements.requiredEvidence),
+    requirementContext: stableValue(requirements.context),
     forbiddenClaims: [...new Set(spec.forbiddenClaims ?? [])],
     onMissingEvidence: "insufficient_evidence",
     needsClarification: Boolean(intentEnvelope.needsClarification || intentEnvelope.confidence < minimumConfidence),

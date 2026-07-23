@@ -49,6 +49,9 @@ export function createAssetResolver(options = {}) {
     return {
       entityType,
       apiName: entityType === "item" ? requested : lookup,
+      ...(entityType === "unit" && Number.isFinite(Number(record?.cost))
+        ? { cost: Number(record.cost) }
+        : {}),
       ...(entityType === "item" && lookup !== requested ? { assetApiName: lookup } : {}),
       ...(entityType === "trait" ? { filterId: requested } : {}),
       iconUrl,

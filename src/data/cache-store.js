@@ -490,6 +490,25 @@ export class MemoryCacheStore {
     return entry ? cloneValue(entry) : null;
   }
 
+  updateQueryEventConclusion(queryId, conclusion) {
+    const key = String(queryId ?? "");
+    const entry = this.queryEvents.get(key);
+    if (!entry) return null;
+    const response = cloneValue(entry.response ?? {});
+    response.answer = {
+      ...(response.answer ?? {}),
+      generatedConclusion: cloneValue(conclusion ?? null)
+    };
+    const updated = {
+      ...entry,
+      response,
+      llmUsed: conclusion?.status === "generated",
+      llmModel: conclusion?.model ?? entry.llmModel ?? null
+    };
+    this.queryEvents.set(key, updated);
+    return cloneValue(updated);
+  }
+
   pruneQueryEventsBefore(createdBefore) {
     const cutoff = String(createdBefore ?? "");
     let count = 0;
@@ -1024,6 +1043,13 @@ export class JsonFileCacheStore extends MemoryCacheStore {
   async getQueryEvent(queryId) {
     await this._ensureLoaded();
     return super.getQueryEvent(queryId);
+  }
+
+  async updateQueryEventConclusion(queryId, conclusion) {
+    await this._ensureLoaded();
+    const entry = super.updateQueryEventConclusion(queryId, conclusion);
+    if (entry) await this._persistQueued();
+    return entry;
   }
 
   async pruneQueryEventsBefore(createdBefore) {

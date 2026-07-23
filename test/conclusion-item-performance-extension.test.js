@@ -62,6 +62,8 @@ test("declarative item_performance Spec creates its Question Contract without ch
   assert.equal(capturedEvidence.questionContract.questionType, "item_performance");
   assert.equal(capturedEvidence.conclusionSpec.id, "unit_item_rankings.item_performance");
   assert.deepEqual(capturedEvidence.questionContract.requiredAnswerDimensions,
+    ["target_item_performance", "ranking_context"]);
+  assert.deepEqual(capturedEvidence.questionContract.allowedAnswerDimensions,
     ["target_item_performance", "ranking_context", "sample_risk"]);
   assert.deepEqual(conclusion.content.addressedDimensions,
     ["target_item_performance", "ranking_context", "sample_risk"]);

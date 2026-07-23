@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 
-export const CONCLUSION_SPEC_SCHEMA_VERSION = "conclusion-spec.v1";
-export const CONCLUSION_SPEC_REGISTRY_VERSION = "conclusion-spec-registry.v1";
-export const CONCLUSION_VALIDATOR_VERSION = "conclusion-validator.v3";
+import { CONCLUSION_DIMENSION_CONDITIONS } from "./conclusion-requirements.js";
+
+export const CONCLUSION_SPEC_SCHEMA_VERSION = "conclusion-spec.v2";
+export const CONCLUSION_SPEC_REGISTRY_VERSION = "conclusion-spec-registry.v2";
+export const CONCLUSION_VALIDATOR_VERSION = "conclusion-validator.v4";
 
 const VALID_EVIDENCE_REQUIREMENTS = new Set([
   "visible_builds", "visible_items", "visible_emblems", "visible_comps", "visible_trends",
@@ -21,6 +23,7 @@ const VALID_FALLBACK_RENDERERS = new Set([
   "unit_build_rankings", "unit_item_rankings", "unit_emblem_rankings",
   "unit_item_comparison", "comp_rankings", "comp_trends", "comp_analysis"
 ]);
+const VALID_DIMENSION_CONDITIONS = new Set(CONCLUSION_DIMENSION_CONDITIONS);
 
 const PROMPT_FILES = new Set([
   "unit-build-rankings.md", "unit-item-rankings.md", "unit-emblem-rankings.md",
@@ -46,7 +49,7 @@ function prompt(key, version, file) {
 function spec({
   id, intent, questionType = "default", resultTypes = [intent], prompt: promptValue,
   requiredAnswerDimensions, requiredEvidence, validationRules = {}, generationRules = {}, fallback,
-  priority = 100, version = 1, enabled = true, forbiddenClaims = []
+  conditionalAnswerDimensions = {}, priority = 100, version = 1, enabled = true, forbiddenClaims = []
 }) {
   return {
     schemaVersion: CONCLUSION_SPEC_SCHEMA_VERSION,
@@ -58,6 +61,7 @@ function spec({
     prompt: promptValue,
     requiredAnswerDimensions,
     requiredEvidence,
+    conditionalAnswerDimensions,
     forbiddenClaims,
     validationRules: { ...validationRules },
     generationRules: { ...DEFAULT_RULES, ...generationRules },
@@ -72,69 +76,83 @@ const COMP_EVIDENCE = ["visible_comps", "games", "avgPlacement", "top4Rate", "wi
 const RAW_SPECS = [
   spec({
     id: "unit_build_rankings.default", intent: "unit_build_rankings",
+    version: 2,
     prompt: prompt("unit-build-rankings", "unit-build-rankings.v3", "unit-build-rankings.md"),
     requiredAnswerDimensions: ["build_performance", "core_item_tendency", "sample_risk"],
     requiredEvidence: {
       build_performance: ["visible_builds", "games", "avgPlacement", "top4Rate", "winRate"],
       core_item_tendency: ["visible_builds"], sample_risk: ["sample_status"]
     },
+    conditionalAnswerDimensions: {
+      core_item_tendency: "when_multiple_candidates",
+      sample_risk: "when_low_sample"
+    },
     fallback: "unit_build_rankings"
   }),
   spec({
     id: "unit_build_completion.default", intent: "unit_build_completion",
+    version: 2,
     prompt: prompt("unit-build-rankings", "unit-build-rankings.v3", "unit-build-rankings.md"),
     requiredAnswerDimensions: ["completion_options", "locked_item_compatibility", "sample_risk"],
     requiredEvidence: {
       completion_options: BUILD_EVIDENCE, locked_item_compatibility: ["visible_builds", "lockedItems"],
       sample_risk: ["sample_status"]
-    }, fallback: "unit_build_rankings"
+    }, conditionalAnswerDimensions: { sample_risk: "when_low_sample" }, fallback: "unit_build_rankings"
   }),
   spec({
     id: "unit_best_3_items.default", intent: "unit_best_3_items",
+    version: 2,
     prompt: prompt("unit-build-rankings", "unit-build-rankings.v3", "unit-build-rankings.md"),
     requiredAnswerDimensions: ["build_performance", "core_item_tendency", "sample_risk"],
     requiredEvidence: {
       build_performance: BUILD_EVIDENCE, core_item_tendency: ["visible_builds"], sample_risk: ["sample_status"]
+    }, conditionalAnswerDimensions: {
+      core_item_tendency: "when_multiple_candidates",
+      sample_risk: "when_low_sample"
     }, fallback: "unit_build_rankings"
   }),
   spec({
     id: "unit_item_rankings.default", intent: "unit_item_rankings",
+    version: 2,
     prompt: prompt("unit-item-rankings", "unit-item-rankings.v3", "unit-item-rankings.md"),
     requiredAnswerDimensions: ["item_performance_ranking", "metric_reliability", "sample_risk"],
     requiredEvidence: {
       item_performance_ranking: ITEM_EVIDENCE, metric_reliability: ["coverage", "games"], sample_risk: ["sample_status"]
-    }, fallback: "unit_item_rankings",
+    }, conditionalAnswerDimensions: { sample_risk: "when_low_sample" }, fallback: "unit_item_rankings",
     validationRules: { focus: "item_ranking_not_full_build" }
   }),
   // Stage-five extension: this variant reuses the existing item evidence and engine.
   spec({
     id: "unit_item_rankings.item_performance", intent: "unit_item_rankings", questionType: "item_performance",
+    version: 2,
     prompt: prompt("unit-item-rankings", "unit-item-rankings.v3", "unit-item-rankings.md"),
     requiredAnswerDimensions: ["target_item_performance", "ranking_context", "sample_risk"],
     requiredEvidence: {
       target_item_performance: ["target_item", "games", "avgPlacement", "top4Rate", "winRate"],
       ranking_context: ["visible_items", "coverage"], sample_risk: ["sample_status"]
-    }, fallback: "unit_item_rankings", priority: 200,
+    }, conditionalAnswerDimensions: { sample_risk: "when_low_sample" }, fallback: "unit_item_rankings", priority: 200,
     validationRules: { focus: "item_performance_not_full_build" }
   }),
   spec({
     id: "unit_emblem_rankings.default", intent: "unit_emblem_rankings",
+    version: 2,
     prompt: prompt("unit-emblem-rankings", "unit-emblem-rankings.v2", "unit-emblem-rankings.md"),
     requiredAnswerDimensions: ["emblem_performance_ranking", "metric_reliability", "sample_risk"],
     requiredEvidence: {
       emblem_performance_ranking: ["visible_emblems", "games", "avgPlacement", "top4Rate", "winRate"],
       metric_reliability: ["games"], sample_risk: ["sample_status"]
-    }, fallback: "unit_emblem_rankings"
+    }, conditionalAnswerDimensions: { sample_risk: "when_low_sample" }, fallback: "unit_emblem_rankings"
   }),
   spec({
     id: "unit_item_comparison.default", intent: "unit_item_comparison",
+    version: 2,
     prompt: prompt("unit-item-comparison", "unit-item-comparison.v2", "unit-item-comparison.md"),
     requiredAnswerDimensions: ["comparison_result", "comparison_metrics", "sample_risk"],
     requiredEvidence: {
       comparison_result: ["comparison_options", "winner"],
       comparison_metrics: ["exclusive_samples", "games", "avgPlacement", "top4Rate", "winRate"],
       sample_risk: ["sample_status"]
-    }, fallback: "unit_item_comparison",
+    }, conditionalAnswerDimensions: { sample_risk: "when_low_sample" }, fallback: "unit_item_comparison",
     validationRules: { requireComparisonTargets: true }
   }),
   spec({
@@ -233,6 +251,11 @@ function validateSpecShape(value, options = {}) {
     for (const requirement of requirements ?? []) {
       if (!VALID_EVIDENCE_REQUIREMENTS.has(requirement)) errors.push(`unsupported requiredEvidence: ${requirement}`);
     }
+  }
+  if (!object(value.conditionalAnswerDimensions)) errors.push("conditionalAnswerDimensions must be an object");
+  for (const [dimension, condition] of Object.entries(value.conditionalAnswerDimensions ?? {})) {
+    if (!value.requiredAnswerDimensions?.includes(dimension)) errors.push(`conditional dimension is not declared: ${dimension}`);
+    if (!VALID_DIMENSION_CONDITIONS.has(condition)) errors.push(`unsupported dimension condition: ${condition}`);
   }
   for (const key of Object.keys(value.validationRules ?? {})) {
     if (!VALID_VALIDATION_KEYS.has(key)) errors.push(`unsupported validation rule: ${key}`);

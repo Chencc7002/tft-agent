@@ -37,6 +37,11 @@ function hasSpecialItemScope(parsedQuery, catalog) {
   });
 }
 
+function defaultStarLevelForUnit(unitApiName, catalog) {
+  const cost = Number(catalog.unitByApiName.get(unitApiName)?.cost);
+  return Number.isFinite(cost) && cost >= 1 && cost <= 2 ? [3] : [2];
+}
+
 export function buildQueryContext(parsedQuery, options = {}) {
   const catalog = options.catalog ?? createCatalog();
   const preferences = {
@@ -61,7 +66,9 @@ export function buildQueryContext(parsedQuery, options = {}) {
     warnings.push("当前条件下未找到达到稳定门槛的 Comp；以下结果未限制 Comp。");
   }
 
-  const starLevel = parsedQuery.starLevel?.length ? parsedQuery.starLevel : [2];
+  const starLevel = parsedQuery.starLevel?.length
+    ? parsedQuery.starLevel
+    : defaultStarLevelForUnit(parsedQuery.unit, catalog);
   const itemCount = parsedQuery.itemCount ?? 3;
   const itemPolicy = parsedQuery.itemPolicy ?? preferences.itemPolicy;
   const performanceCategory = parsedQuery.performanceItem
