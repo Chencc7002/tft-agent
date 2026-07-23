@@ -6,7 +6,7 @@
 - status: completed
 - branch: codex/wechat-mobile-chat
 - baseline_commit: d9416b0
-- latest_verified_commit: fe84785
+- latest_verified_commit: 1f505e7
 
 ## Completed gates
 
@@ -30,16 +30,24 @@
 - metrics: `entity-linking-phase3.v1` — core Top-1 100%; slang/alias Top-3 100%; concepts 100%; nonexistent false-hit 0%; phase-2 action/domain gates retained
 - report: `docs/reports/phase-3-entity-linker.md`, `docs/reports/phase-3-entity-linker.json`
 
+- acceptance audit: phases 0-3
+- artifact verification: phase reports are tracked and linked to implementation/verification commits `f551390`, `bfcaa5e`, `3c72699`, `2d16226`, `0d25453`, `fe84785`, `8b676fe`, `4996a7d`
+- real LLM: existing one-query `smoke:llm` passed; new T2 `eval:llm:live` passed 20/20 strict requests with `chat` / `deepseek-v4-flash`
+- live metrics: structured output 100%; domain/action 95% / 95%; understanding status 85%; entity mention recall 92.31%; token/latency budgets 100%; 0 retries
+- final audit tests: `npm test` — 599 total / 579 passed / 0 failed / 20 skipped; phase-0/1/2/3 evaluations and small-window/comps smokes passed
+- audit report: `docs/reports/phase-0-3-acceptance-audit.md`, `docs/reports/phase-0-3-acceptance-audit.json`
+- audit implementation commit: `1f505e7`
+
 ## Current work
 
-- objective: phase 3 complete; preserve shadow-only behavior and wait for authorization to begin phase 4 context resolution
-- files: `src/understanding/`, phase-2/3 evaluation datasets and runners, tests, protocol and phase reports
-- assumptions: existing deterministic business rules and IntentEnvelope remain authoritative; the untracked master-plan file remains user-owned and untouched
+- objective: phase 0-3 acceptance audit complete; preserve shadow-only behavior and wait for authorization to begin phase 4 context resolution
+- files: `src/understanding/`, live/phase-2/3 evaluation datasets and runners, tests, protocol and phase reports
+- assumptions: existing deterministic business rules and IntentEnvelope remain authoritative; live LLM evaluation is opt-in through `TFT_AGENT_LIVE_LLM=1`; the untracked master-plan file remains user-owned and untouched
 
 ## Blockers
 
 - blocker: none
-- evidence: no master-plan blocking condition has been triggered
+- evidence: no master-plan blocking condition has been triggered; the configured real provider completed the final 20-case T2 smoke
 - user_input_needed: none
 
 ## Next
