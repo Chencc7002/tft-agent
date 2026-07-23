@@ -219,7 +219,7 @@ function conclusionCorrectionPolicy(validation, raw, evidence, catalog) {
     const citationError = ["unsupported_number", "unsupported_entity", "wrong_target"].includes(issue.category)
       && /(?:unsupported (?:number|percentage|sample count|average placement|trend improvement)|entity absent from evidence)/u.test(issue.message);
     if (!citationError) {
-      if (issue.category === "wrong_target") return "reject";
+      if (issue.category === "wrong_target") return "retry_once";
       continue;
     }
     const candidates = findConclusionCitationCandidates(
@@ -228,7 +228,7 @@ function conclusionCorrectionPolicy(validation, raw, evidence, catalog) {
       evidence,
       { catalog }
     );
-    if (candidates.length === 0) return "reject";
+    if (candidates.length === 0) return "retry_once";
     if (candidates.length > 1) ambiguousCitation = true;
   }
   return ambiguousCitation ? "retry_once" : "retry";

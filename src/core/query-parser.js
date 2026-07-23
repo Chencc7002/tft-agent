@@ -55,6 +55,12 @@ function parseItemCategories(input) {
 
 function requestsCategoryRanking(input) {
   const normalized = normalizeText(input);
+  const category = "(?:纹章|转职|神器|光明(?:装备)?)";
+  const decision = "(?:推荐|排行|排名|优先|选择|值得|适合|好|强)";
+  const categoryDecision = new RegExp(
+    `(?:${decision}).{0,12}${category}|${category}.{0,12}(?:${decision})`
+  );
+  const globalCompContext = /(?:阵容|体系|阵容榜|热门阵容)/.test(normalized);
   return /(?:有|能用|能带|可以用|可以带)?(?:哪些|什么|哪(?:一|几)?件).{0,4}(?:纹章|转职|神器|光明(?:装备)?)/.test(normalized)
     || /(?:纹章|转职|神器|光明(?:装备)?).{0,4}(?:有哪些|有些什么|有哪几件)/.test(normalized)
     || /(?:有?什么|哪些|哪个|哪件).{0,10}(?:好|强|强力|厉害|适合|推荐|优先|值得)/.test(normalized)
@@ -63,7 +69,8 @@ function requestsCategoryRanking(input) {
     || /(?:纹章|转职|神器|光明(?:装备)?).{0,6}(?:最好|最强|最适合|最优|表现最好)/.test(normalized)
     || /(?:应该|该|适合|推荐).{0,6}(?:带|携带|选择|拿|用)?(?:什么|哪个|哪些|哪(?:一|几)?件).{0,5}(?:纹章|转职|转(?!换|成)|神器|光明(?:装备)?)/.test(normalized)
     || /(?:带|携带|选择|拿|用).{0,4}(?:什么|哪个|哪些|哪(?:一|几)?件).{0,5}(?:纹章|转职|转(?!换|成)|神器|光明(?:装备)?)/.test(normalized)
-    || /(?:纹章|转职|神器|光明(?:装备)?).{0,4}(?:推荐|排行|排名)/.test(normalized);
+    || /(?:纹章|转职|神器|光明(?:装备)?).{0,4}(?:推荐|排行|排名)/.test(normalized)
+    || (!globalCompContext && categoryDecision.test(normalized));
 }
 
 const RANK_ORDER = Object.freeze([

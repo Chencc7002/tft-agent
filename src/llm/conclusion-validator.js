@@ -277,19 +277,89 @@ function allowedNumericValues(records, evidence) {
   return values;
 }
 
+function stableRound(value, digits = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return Number.NaN;
+  const factor = 10 ** digits;
+  const adjustment = Math.sign(number || 1) * Number.EPSILON * Math.max(1, Math.abs(number)) * 8;
+  return Math.round((number + adjustment) * factor) / factor;
+}
+
+function numericRepresentations(candidate) {
+  const values = new Set([Number(candidate)]);
+  for (const digits of [0, 1, 2, 3, 4]) values.add(stableRound(candidate, digits));
+  if (candidate >= 0 && candidate <= 1) {
+    const percentage = candidate * 100;
+    values.add(percentage);
+    for (const digits of [0, 1, 2]) values.add(stableRound(percentage, digits));
+  }
+  return values;
+}
+
 function matchesAllowedNumber(value, allowed) {
   for (const candidate of allowed) {
-    const representations = [
-      candidate,
-      ...[0, 1, 2, 3, 4].map((digits) => Number(candidate.toFixed(digits)))
-    ];
-    if (candidate >= 0 && candidate <= 1) {
-      const percentage = candidate * 100;
-      representations.push(percentage, ...[0, 1, 2].map((digits) => Number(percentage.toFixed(digits))));
-    }
-    if (representations.some((entry) => Math.abs(entry - value) <= 0.00005)) return true;
+    if ([...numericRepresentations(candidate)]
+      .some((entry) => Math.abs(entry - value) <= 0.00005)) return true;
   }
   return false;
+}
+
+function decimalPlaces(value) {
+  const text = String(value ?? "");
+  return text.includes(".") ? text.split(".")[1].length : 0;
+}
+
+function supportsDisplayedNumber(candidate, value, digits) {
+  return stableRound(candidate, digits) === value
+    || Math.abs(Number(candidate) - value) <= (0.5 * (10 ** -digits)) + 0.0000001;
+}
+
+function comparisonContext(text, index = 0) {
+  const source = String(text ?? "");
+  const start = Math.max(0, Number(index ?? 0) - 28);
+  const end = Math.min(source.length, Number(index ?? 0) + 36);
+  return /(?:相差|差值|高于|低于|领先|落后|提升|下降|增加|减少|多出|少于|个百分点|\bpp\b)/iu
+    .test(source.slice(start, end));
+}
+
+function pairwiseDerivedValues(records) {
+  const output = new Set();
+  const metricSeries = [
+    ["rate", [...records].map((record) => record?.stats?.top4Rate)],
+    ["rate", [...records].map((record) => record?.stats?.winRate)],
+    ["rate", [...records].map((record) => record?.stats?.pickRate)],
+    ["rate", [...records].map((record) => record?.appearanceRate)],
+    ["rate", [...records].map((record) => record?.coverage)],
+    ["number", [...records].map((record) => record?.stats?.avgPlacement)],
+    ["number", [...records].map((record) => record?.stats?.games)]
+  ];
+  for (const [kind, rawValues] of metricSeries) {
+    const values = rawValues.map(Number).filter(Number.isFinite);
+    for (let left = 0; left < values.length; left += 1) {
+      for (let right = left + 1; right < values.length; right += 1) {
+        for (const digits of kind === "rate" ? [0, 1, 2] : [0, 1, 2, 3]) {
+          const leftValue = stableRound(kind === "rate" ? values[left] * 100 : values[left], digits);
+          const rightValue = stableRound(kind === "rate" ? values[right] * 100 : values[right], digits);
+          output.add(stableRound(Math.abs(leftValue - rightValue), digits));
+        }
+      }
+    }
+  }
+  return output;
+}
+
+function isApproximateSampleMention(text, mention) {
+  const source = String(text ?? "");
+  const start = Math.max(0, Number(mention.index ?? 0) - 8);
+  return /(?:约|大约|大概|接近|近似|约为)\s*$/u.test(source.slice(start, Number(mention.index ?? 0)));
+}
+
+function supportsApproximateSample(value, games) {
+  const text = String(Math.trunc(Math.abs(value)));
+  const trailingZeros = text.match(/0+$/u)?.[0]?.length ?? 0;
+  if (trailingZeros === 0) return false;
+  const factor = 10 ** trailingZeros;
+  return games.some((candidate) => stableRound(candidate / factor, 0) * factor === value);
 }
 
 function sampleCountMentions(text) {
@@ -357,9 +427,12 @@ function validateGenericNumbers(text, records, evidence, path, errors) {
     remaining = remaining.replace(new RegExp(escapedPattern(name), "gu"), " ");
   }
   const allowed = allowedNumericValues(records, evidence);
+  const derived = pairwiseDerivedValues(records);
   for (const match of remaining.matchAll(/(?<![A-Za-z0-9_])(-?\d+(?:\.\d+)?)(?![A-Za-z0-9_])/gu)) {
     const value = Number(match[1]);
-    if (!matchesAllowedNumber(value, allowed)) {
+    const supportedDerived = comparisonContext(remaining, match.index)
+      && matchesAllowedNumber(value, derived);
+    if (!matchesAllowedNumber(value, allowed) && !supportedDerived) {
       errors.push(`${path} contains unsupported number: ${match[0]}`);
     }
   }
@@ -375,7 +448,7 @@ function validateNumbers(text, records, evidence, path, errors) {
   const rates = stats.flatMap((entry) => [entry.top4Rate, entry.winRate, entry.pickRate])
     .concat([...records].flatMap((record) => [record?.appearanceRate, record?.coverage]))
     .filter(Number.isFinite)
-    .map((value) => Number((value * 100).toFixed(1)))
+    .map((value) => value * 100)
     .concat(semanticRates);
   const games = stats.map((entry) => Number(entry.games))
     .concat([...records].flatMap((record) => [
@@ -390,29 +463,34 @@ function validateNumbers(text, records, evidence, path, errors) {
 
   for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*%/gu)) {
     const value = Number(match[1]);
-    const approximateInteger = !match[1].includes(".")
-      && /(?:约|大约|接近|近)\s*$/u.test(text.slice(Math.max(0, match.index - 4), match.index));
+    const digits = decimalPlaces(match[1]);
     const metric = percentageMetricFromText(text, value, match.index);
     const metricRates = metric
       ? [...records].map((record) => recordMetricValue(record, metric))
         .filter(Number.isFinite)
-        .map((candidate) => Number((candidate * 100).toFixed(1)))
+        .map((candidate) => candidate * 100)
       : rates;
-    const supported = metricRates.some((allowed) => approximateInteger
-      ? Math.round(allowed) === value
-      : Math.abs(allowed - value) <= 0.051);
+    const supportedDirect = metricRates.some((allowed) => supportsDisplayedNumber(allowed, value, digits));
+    const supportedDerived = comparisonContext(text, match.index)
+      && matchesAllowedNumber(value, pairwiseDerivedValues(records));
+    const supported = supportedDirect || supportedDerived;
     if (!supported) {
       errors.push(`${path} contains unsupported percentage: ${match[0]}`);
     }
   }
   for (const mention of sampleCountMentions(text).mentions) {
-    if (!games.includes(mention.value) && !isQuerySampleThresholdMention(text, mention, evidence)) {
+    const approximate = isApproximateSampleMention(text, mention)
+      && supportsApproximateSample(mention.value, games);
+    if (!games.includes(mention.value)
+      && !approximate
+      && !isQuerySampleThresholdMention(text, mention, evidence)) {
       errors.push(`${path} contains unsupported sample count: ${mention.text}`);
     }
   }
   for (const match of text.matchAll(/(?:均名|平均名次)\s*(?:为|是|[:：])?\s*(\d+(?:\.\d+)?)/gu)) {
     const value = Number(match[1]);
-    if (!placements.some((allowed) => Math.abs(Number(allowed.toFixed(2)) - value) <= 0.005)) {
+    const digits = decimalPlaces(match[1]);
+    if (!placements.some((allowed) => supportsDisplayedNumber(allowed, value, digits))) {
       errors.push(`${path} contains unsupported average placement: ${match[0]}`);
     }
   }
@@ -505,6 +583,10 @@ function describesItemAsCore(text, item) {
 
 function validateCoreClaim(text, records, evidence, path, errors) {
   if (!CORE_CLAIM.test(text)) return;
+  const intent = evidence?.request?.requestedIntent ?? evidence?.request?.intent;
+  if (["unit_item_rankings", "unit_emblem_rankings"].includes(intent)) {
+    return;
+  }
   const allSignals = evidence?.itemSignals ?? [];
   const scopedSignals = [...records].filter((record) => record?.kind === "item_core_signal");
   const entryScoped = /^(?:reasons|alternatives)\[/u.test(path);
@@ -767,8 +849,9 @@ function allowedFeedbackNumbers(records, evidence) {
   const values = new Set(allowedNumericValues(records, evidence));
   for (const value of [...values]) {
     if (value >= 0 && value <= 1) {
-      values.add(Number((value * 100).toFixed(1)));
-      values.add(Number((value * 100).toFixed(2)));
+      values.add(stableRound(value * 100, 0));
+      values.add(stableRound(value * 100, 1));
+      values.add(stableRound(value * 100, 2));
     }
   }
   return [...values].sort((left, right) => left - right);
@@ -792,7 +875,7 @@ function recordPercentageValues(record) {
   const stats = record?.stats ?? {};
   const values = [stats.top4Rate, stats.winRate, stats.pickRate, record?.appearanceRate, record?.coverage]
     .filter(Number.isFinite)
-    .map((value) => Number((value * 100).toFixed(1)));
+    .flatMap((value) => [0, 1, 2].map((digits) => stableRound(value * 100, digits)));
   if (record?.authority === "official_static_catalog" || /description/u.test(String(record?.type ?? ""))) {
     for (const match of String(record?.text ?? "").matchAll(/(\d+(?:\.\d+)?)\s*%/gu)) {
       values.push(Number(match[1]));
@@ -804,14 +887,16 @@ function recordPercentageValues(record) {
 function recordSupportsValidationNumber(record, message, value) {
   if (!Number.isFinite(value)) return false;
   if (/unsupported percentage/u.test(message)) {
-    return recordPercentageValues(record).some((candidate) => Math.abs(candidate - value) <= 0.051);
+    const digits = decimalPlaces(String(message).match(/-?\d+(?:\.\d+)?/u)?.[0] ?? value);
+    return recordPercentageValues(record).some((candidate) => supportsDisplayedNumber(candidate, value, digits));
   }
   if (/unsupported sample count/u.test(message)) {
     return allowedSampleCounts([record]).includes(value);
   }
   if (/unsupported average placement/u.test(message)) {
     const placement = Number(record?.stats?.avgPlacement);
-    return Number.isFinite(placement) && Math.abs(Number(placement.toFixed(2)) - value) <= 0.005;
+    const digits = decimalPlaces(String(message).match(/-?\d+(?:\.\d+)?/u)?.[0] ?? value);
+    return Number.isFinite(placement) && supportsDisplayedNumber(placement, value, digits);
   }
   if (/unsupported trend improvement/u.test(message)) {
     const improvement = Number(record?.trend?.placementImprovement);
@@ -949,10 +1034,11 @@ function numberRepairMatches(message, text, evidence, linkedEvidenceIds) {
   if (/unsupported percentage/u.test(message)) {
     const metric = percentageMetricFromText(text, value);
     if (!metric) return [];
+    const digits = decimalPlaces(String(message).match(/-?\d+(?:\.\d+)?/u)?.[0] ?? value);
     for (const [evidenceId, record] of evidenceRecords(evidence)) {
       if (linked.has(evidenceId) || !citationFamilyMatches(evidenceId, linkedEvidenceIds)) continue;
       const candidate = recordMetricValue(record, metric);
-      if (Number.isFinite(candidate) && Math.abs(candidate * 100 - value) <= 0.051) {
+      if (Number.isFinite(candidate) && supportsDisplayedNumber(candidate * 100, value, digits)) {
         matches.push({ evidenceId, metric });
       }
     }
@@ -969,12 +1055,13 @@ function numberRepairMatches(message, text, evidence, linkedEvidenceIds) {
     return matches;
   }
   if (/unsupported average placement/u.test(message)) {
+    const digits = decimalPlaces(String(message).match(/-?\d+(?:\.\d+)?/u)?.[0] ?? value);
     for (const [evidenceId, record] of evidenceRecords(evidence)) {
       const candidate = Number(record?.stats?.avgPlacement);
       if (!linked.has(evidenceId)
         && citationFamilyMatches(evidenceId, linkedEvidenceIds)
         && Number.isFinite(candidate)
-        && Math.abs(Number(candidate.toFixed(2)) - value) <= 0.005) {
+        && supportsDisplayedNumber(candidate, value, digits)) {
         matches.push({ evidenceId, metric: "avgPlacement" });
       }
     }
@@ -1057,6 +1144,57 @@ function citationEntryAtPath(value, path) {
   return match ? value?.[match[1]]?.[Number(match[2])] : null;
 }
 
+function evidenceRelevanceScore(evidenceId, record, text, evidence) {
+  const source = String(text ?? "");
+  let score = 0;
+  if (new RegExp(`(?<![A-Za-z0-9_-])${escapedPattern(evidenceId)}(?![A-Za-z0-9_-])`, "u").test(source)) {
+    score += 12;
+  }
+  if (recordNames(record).some((name) => name.length >= 2 && source.includes(name))) score += 8;
+  for (const match of source.matchAll(/(\d+(?:\.\d+)?)\s*%/gu)) {
+    const value = Number(match[1]);
+    const digits = decimalPlaces(match[1]);
+    if (recordPercentageValues(record).some((candidate) => supportsDisplayedNumber(candidate, value, digits))) {
+      score += 5;
+    }
+  }
+  for (const mention of sampleCountMentions(source).mentions) {
+    const games = allowedSampleCounts([record]);
+    if (games.includes(mention.value)
+      || (isApproximateSampleMention(source, mention) && supportsApproximateSample(mention.value, games))) {
+      score += 5;
+    }
+  }
+  for (const match of source.matchAll(/(?:均名|平均名次)\s*(?:为|是|[:：])?\s*(\d+(?:\.\d+)?)/gu)) {
+    const placement = Number(record?.stats?.avgPlacement);
+    if (Number.isFinite(placement)
+      && supportsDisplayedNumber(placement, Number(match[1]), decimalPlaces(match[1]))) {
+      score += 5;
+    }
+  }
+  if (evidence?.itemRankingContext?.directAnalysisEvidenceIds?.includes(evidenceId)
+    || evidence?.compRankingContext?.directAnalysisEvidenceIds?.includes(evidenceId)) {
+    score += 2;
+  }
+  return score;
+}
+
+function normalizeEntryEvidenceIds(entry, records, evidence) {
+  if (!Array.isArray(entry?.evidenceIds)) return null;
+  const original = [...new Set(entry.evidenceIds.map(String))].filter((id) => records.has(id));
+  if (original.length <= 3) return original;
+  return original
+    .map((evidenceId, index) => ({
+      evidenceId,
+      index,
+      score: evidenceRelevanceScore(evidenceId, records.get(evidenceId), entry.text, evidence)
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 3)
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.evidenceId);
+}
+
 export function repairConclusionCitations(rawValue, evidence, options = {}) {
   const initialValidation = options.validation
     ?? validateConclusionOutput(rawValue, evidence, options);
@@ -1066,7 +1204,24 @@ export function repairConclusionCitations(rawValue, evidence, options = {}) {
 
   const value = structuredClone(rawValue);
   const repairs = [];
-  for (const issue of initialValidation.issues ?? []) {
+  const records = evidenceRecords(evidence);
+  for (const collectionName of ["reasons", "alternatives"]) {
+    for (let index = 0; index < (value?.[collectionName]?.length ?? 0); index += 1) {
+      const entry = value[collectionName][index];
+      const normalized = normalizeEntryEvidenceIds(entry, records, evidence);
+      if (!normalized || normalized.length === entry.evidenceIds.length) continue;
+      entry.evidenceIds = normalized;
+      repairs.push({
+        path: `${collectionName}[${index}].evidenceIds`,
+        kind: "evidence_scope",
+        evidenceIds: normalized
+      });
+    }
+  }
+  let workingValidation = repairs.length > 0
+    ? validateConclusionOutput(value, evidence, options)
+    : initialValidation;
+  for (const issue of workingValidation.issues ?? []) {
     if (!["unsupported_number", "unsupported_entity", "wrong_target"].includes(issue.category)) continue;
     const entry = citationEntryAtPath(value, issue.path);
     if (!entry || !Array.isArray(entry.evidenceIds)) continue;
@@ -1081,6 +1236,7 @@ export function repairConclusionCitations(rawValue, evidence, options = {}) {
       - (evidenceOrder.get(right) ?? Number.MAX_SAFE_INTEGER)
     ));
     repairs.push({ path: issue.path, evidenceId, kind: candidates[0].kind, metric: candidates[0].metric ?? null });
+    workingValidation = validateConclusionOutput(value, evidence, options);
   }
 
   if (repairs.length === 0) {

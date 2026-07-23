@@ -160,6 +160,50 @@ test("validateConclusionOutput distinguishes structural numbers from sample coun
   assert.equal(result.valid, true, result.errors.join("\n"));
 });
 
+test("validateConclusionOutput accepts standard display rounding, qualified sample approximation, and cited derived deltas", () => {
+  const roundedEvidence = structuredClone(evidence);
+  const first = roundedEvidence.recommendations.find((entry) => entry.evidenceId === "build:1");
+  const second = roundedEvidence.recommendations.find((entry) => entry.evidenceId === "build:2");
+  first.stats.top4Rate = 0.5125;
+  first.stats.avgPlacement = 2.755;
+  first.stats.games = 2232;
+  second.stats.top4Rate = 0.3165;
+
+  const value = validOutput({
+    reasons: [{
+      evidenceIds: ["build:1"],
+      text: "该方案前四率51.3%，平均名次2.76，约2200场。"
+    }],
+    alternatives: [{
+      evidenceIds: ["build:1", "build:2"],
+      text: "按页面显示精度，两套方案前四率相差19.6个百分点。"
+    }]
+  });
+  const result = validateConclusionOutput(value, roundedEvidence, { catalog });
+  assert.equal(result.valid, true, result.errors.join("\n"));
+
+  const unsupportedExact = structuredClone(value);
+  unsupportedExact.reasons[0].text = "该方案前四率51.3%，平均名次2.76，共2200场。";
+  const invalid = validateConclusionOutput(unsupportedExact, roundedEvidence, { catalog });
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join("\n"), /unsupported sample count: 2200场/u);
+});
+
+test("validateConclusionOutput rounds integer percentages from the cited metric without admitting unrelated values", () => {
+  const roundedEvidence = structuredClone(evidence);
+  roundedEvidence.recommendations.find((entry) => entry.evidenceId === "build:1").stats.top4Rate = 0.667;
+  const accepted = validateConclusionOutput(validOutput({
+    reasons: [{ evidenceIds: ["build:1"], text: "该方案前四率67%。" }]
+  }), roundedEvidence, { catalog });
+  assert.equal(accepted.valid, true, accepted.errors.join("\n"));
+
+  const rejected = validateConclusionOutput(validOutput({
+    reasons: [{ evidenceIds: ["build:1"], text: "该方案前四率69%。" }]
+  }), roundedEvidence, { catalog });
+  assert.equal(rejected.valid, false);
+  assert.match(rejected.errors.join("\n"), /unsupported percentage: 69%/u);
+});
+
 test("validateConclusionOutput accepts evidence-backed dates and equivalent hour windows", () => {
   const datedEvidence = structuredClone(evidence);
   datedEvidence.dataStatus.updatedAt = "2026-07-16T08:00:00.000Z";
@@ -204,6 +248,23 @@ test("validateConclusionOutput caps evidence id expansion at three entries", () 
   const result = validateConclusionOutput(value, evidence, { catalog });
   assert.equal(result.valid, true, result.errors.join("\n"));
   assert.deepEqual(result.value.reasons[0].evidenceIds, ["build:1", "build:2", "item-signal:1"]);
+});
+
+test("repairConclusionCitations normalizes oversized evidence scopes by textual relevance", () => {
+  const value = validOutput({
+    reasons: [{
+      evidenceIds: ["build:1", "build:2", "item-signal:1", "item-signal:2"],
+      text: "第一套前四率61.2%，样本1248场。"
+    }]
+  });
+  const initial = validateConclusionOutput(value, evidence, { catalog });
+  assert.equal(initial.valid, false);
+  assert.match(initial.errors.join("\n"), /evidenceIds must contain 1 to 3 entries/u);
+  const repaired = repairConclusionCitations(value, evidence, { catalog, validation: initial });
+  assert.equal(repaired.changed, true);
+  assert.equal(repaired.validation.valid, true, repaired.validation.errors.join("\n"));
+  assert.equal(repaired.value.reasons[0].evidenceIds.length, 3);
+  assert.equal(repaired.value.reasons[0].evidenceIds.includes("build:1"), true);
 });
 
 test("validateConclusionOutput reports allowed numbers from the linked evidence scope", () => {
@@ -328,7 +389,7 @@ test("validateConclusionOutput accepts evidence-backed emblem shorthand", () => 
   const value = {
     schemaVersion: "llm_conclusion.v1",
     status: "ok",
-    headline: "挑战者是当前样本中的稳定转职选择",
+    headline: "挑战者是当前样本中的核心转职选择",
     summary: "挑战者有830场样本，前四率63.3%，平均名次3.79，可作为当前统计口径下的常规参考。",
     reasons: [{ evidenceIds: ["item:1"], text: "挑战者有830场样本，前四率63.3%，平均名次3.79。" }],
     alternatives: [],
