@@ -3,10 +3,10 @@
 ## Current
 
 - phase: 1
-- status: in_progress
+- status: completed
 - branch: codex/wechat-mobile-chat
 - baseline_commit: d9416b0
-- latest_verified_commit: d9416b0
+- latest_verified_commit: bfcaa5e
 
 ## Completed gates
 
@@ -15,11 +15,16 @@
 - metrics: 300 total and unique inputs; 0 privacy violations; 90% non-standard style; every required failure label and phenomenon covered
 - report: `docs/reports/phase-0-baseline.md`, `docs/reports/phase-0-baseline.json`
 
+- phase: 1
+- tests: final Node 18 `npm test` — 580 total / 560 passed / 0 failed / 20 skipped; targeted — 70 total / 69 passed / 0 failed / 1 skipped; bundled Node 24 targeted — 22 passed / 0 failed / 0 skipped; small-window/comps/SQLite smokes passed
+- metrics: `core-agent-cases.v1` — 50 passed / 0 failed / 0 skipped; task, intent, clarification, tool selection and tool input validity 100%; expected fallback 4%; expected timeout 2%
+- report: `docs/reports/phase-1-agent-runtime.md`, `docs/reports/phase-1-agent-runtime.json`
+
 ## Current work
 
-- objective: implement Agent Runtime v1, shared Tool Registry/Executor, production wrapping, and the minimum offline evaluation layer
-- files: planned `src/agent/`, integration points in retrieval/recommendation/server, `eval/`, tests and reports
-- assumptions: existing modified conclusion-layer files belong to the user and remain untouched; local query events may be read only for privacy-clean aggregate/sample extraction
+- objective: phase 1 complete; preserve its gates and prepare to start phase 2 only when requested
+- files: `src/agent/`, production retrieval/recommendation/server/store integration, `eval/`, tests, architecture and phase reports
+- assumptions: existing deterministic business rules remain authoritative; the untracked master-plan file remains user-owned and untouched
 
 ## Blockers
 
@@ -29,5 +34,5 @@
 
 ## Next
 
-- next_step: write Runtime state, budget and event contract tests before production integration
-- required_checks: Runtime/tool unit tests, HTTP integration tests, `npm run eval:agent`, smoke tests, Node 24 SQLite verification, full `npm test`
+- next_step: phase 2 — implement `task-frame.v1` Schema and shadow Semantic Task Parser while keeping the old parser authoritative
+- required_checks: phase 2 action/domain accuracy gates, shadow-result compatibility, token/latency budget, context-compression retention, full regression and updated offline reports
