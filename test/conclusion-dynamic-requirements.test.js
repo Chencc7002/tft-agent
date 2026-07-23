@@ -172,3 +172,69 @@ test("an incomplete requested comparison succeeds only as explicit insufficient 
   assert.equal(conclusion.content.status, "insufficient_evidence");
   assert.deepEqual(conclusion.content.missingDimensions, ["comparison_result", "comparison_metrics"]);
 });
+
+test("completed special-item queries with zero candidates return explicit insufficient evidence", async () => {
+  const result = {
+    type: "unit_item_rankings",
+    parsed: {
+      intent: "unit_item_rankings",
+      unit: "TFT17_Xayah",
+      confidence: 1,
+      parser: { entityMatches: [] }
+    },
+    query: {
+      ...structuredClone(fixture.query),
+      intent: "unit_item_rankings",
+      itemPolicy: "include_artifact",
+      itemCategories: ["artifact"],
+      minSamples: 0
+    },
+    validation: { valid: true, errors: [], warnings: [] },
+    clarification: { needsClarification: false, blocking: false },
+    itemRankings: [],
+    itemRankingMethodology: {
+      methodology: "special_item_outlier_cleaned_avg_placement_only",
+      totalGames: 0,
+      completeBuildCount: 0,
+      coverageReliable: false,
+      sampleFloor: { outlierFloor: 0, relativeRatio: 0.02 }
+    },
+    source: { provider: "MetaTFT", cache: "live", updatedAt: new Date().toISOString() },
+    cache: { query: { hit: false } }
+  };
+  let providerCalls = 0;
+  const conclusion = await generateEvidenceBackedConclusion({
+    result,
+    catalog,
+    input: "霞的神器排行",
+    config: { enabled: true, model: "fixture-model", maxCorrections: 0 },
+    provider: async ({ evidence }) => {
+      providerCalls += 1;
+      const contract = evidence.questionContract;
+      return {
+        schemaVersion: "llm_conclusion.v2",
+        contractId: contract.contractId,
+        status: "insufficient_evidence",
+        addressedDimensions: [],
+        missingDimensions: [...contract.requiredAnswerDimensions],
+        missingEvidence: contract.requiredAnswerDimensions.map((dimension) => ({
+          dimension,
+          requiredEvidence: [...contract.requiredEvidence[dimension]]
+        })),
+        headline: "当前缺少神器排行证据",
+        summary: "本次条件下没有可见神器候选，无法形成装备表现结论。",
+        reasons: [],
+        alternatives: [],
+        nextAction: "可调整星级或段位范围后重新查询。",
+        riskNotice: "当前证据不足。"
+      };
+    }
+  });
+
+  assert.equal(providerCalls, 1);
+  assert.equal(conclusion.status, "generated");
+  assert.equal(conclusion.content.status, "insufficient_evidence");
+  assert.deepEqual(conclusion.content.missingDimensions, [
+    "item_performance_ranking", "metric_reliability"
+  ]);
+});

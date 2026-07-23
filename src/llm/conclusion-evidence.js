@@ -227,6 +227,22 @@ function buildItemRankings(result, catalog) {
   });
 }
 
+function representativeItemRankingEvidenceIds(recommendations) {
+  const records = asArray(recommendations);
+  if (records.length === 0) return [];
+  const output = [records[0].evidenceId];
+  const highestSample = [...records].sort((left, right) => (
+    Number(right?.stats?.games ?? 0) - Number(left?.stats?.games ?? 0)
+      || Number(left?.rank ?? 0) - Number(right?.rank ?? 0)
+  ))[0];
+  if (highestSample?.evidenceId && !output.includes(highestSample.evidenceId)) {
+    output.push(highestSample.evidenceId);
+  } else if (records[1]?.evidenceId) {
+    output.push(records[1].evidenceId);
+  }
+  return output.slice(0, 2);
+}
+
 function buildComparison(result, catalog) {
   const comparison = result?.comparison;
   if (!comparison) return null;
@@ -436,6 +452,7 @@ export function buildConclusionEvidence({ result, catalog, input = "", locale = 
       outlierSampleRatio: Number(result?.itemRankingMethodology?.sampleFloor?.relativeRatio ?? 0),
       stableEvidenceIds: recommendations.filter((entry) => entry.stable).map((entry) => entry.evidenceId),
       lowSampleEvidenceIds: recommendations.filter((entry) => entry.lowSample).map((entry) => entry.evidenceId),
+      directAnalysisEvidenceIds: representativeItemRankingEvidenceIds(recommendations),
       stableTopHalfEvidenceIds: recommendations
         .filter((entry) => entry.stable && entry.stats.avgPlacement !== null && entry.stats.avgPlacement < 4)
         .map((entry) => entry.evidenceId),
@@ -451,7 +468,7 @@ export function buildConclusionEvidence({ result, catalog, input = "", locale = 
       ...resolvedSpec.generationRules,
       coreClaimsRequireItemSignal: true,
       mustQualifyUnstableCore: itemSignals.some((entry) => entry.core && !entry.stable),
-      mustAnalyzeAllDisplayedItemRankings: intent === "unit_item_rankings" || intent === "unit_emblem_rankings",
+      mustAnalyzeRepresentativeItemRankings: intent === "unit_item_rankings" || intent === "unit_emblem_rankings",
       mustDistinguishMetricRankFromReliability: intent === "unit_item_rankings" || intent === "unit_emblem_rankings",
       mustAnalyzeDisplayedCompRankings: intent === "comp_rankings" || intent === "comp_trends" || intent === "comp_analysis",
       mustAlignCompRecommendationWithRequestedMetrics: intent === "comp_rankings",
