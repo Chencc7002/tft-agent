@@ -1473,6 +1473,7 @@ export async function recommendForInput(input, options = {}) {
   const semanticTaskPromise = options.semanticShadow === false
     ? null
     : Promise.resolve().then(() => semanticParser(input, {
+      catalog,
       conversation: options.semanticConversation ?? [],
       dynamicContext: {
         version: options.effectivePatch ?? catalog?.version ?? null,
@@ -1481,7 +1482,10 @@ export async function recommendForInput(input, options = {}) {
       },
       exampleStore: options.semanticExampleStore,
       provider: options.semanticTaskProvider,
-      budget: options.semanticParserBudget
+      budget: options.semanticParserBudget,
+      entitySemanticRetriever: options.semanticRetriever,
+      entityCandidateRetriever: options.entityCandidateRetriever,
+      entityCandidateReranker: options.semanticEntityReranker
     }));
   semanticTaskPromise?.catch(() => {});
   const initialSessionEntry = options.useSession === false

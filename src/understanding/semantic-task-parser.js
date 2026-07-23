@@ -1,6 +1,8 @@
 import { normalizeText } from "../core/normalizer.js";
 import { classifyDomain } from "./domain-gate.js";
 import { defaultFewShotExampleStore } from "./few-shot-example-store.js";
+import { extractEntityMentions } from "./entity-mention-extractor.js";
+import { linkTaskFrameEntities } from "./entity-linker.js";
 import {
   buildSemanticParserMessages,
   createAgentStateBar,
@@ -55,35 +57,6 @@ function inferAction(text, domain, examples) {
     return "search";
   }
   return examples[0]?.action ?? "analyze";
-}
-
-function mentions(text) {
-  const values = [];
-  const add = (rawText, expectedType, role = "concepts") => {
-    if (!rawText || values.some((value) => value.rawText === rawText && value.expectedType === expectedType)) return;
-    values.push({ rawText, expectedType, role });
-  };
-
-  const dictionary = [
-    ["霞", "champion"], ["逆羽", "champion"], ["剑圣", "champion"], ["劍聖", "champion"],
-    ["剑生", "champion"], ["卡莎", "champion"], ["卡沙", "champion"],
-    ["羊刀", "item"], ["杨刀", "item"], ["羊到", "item"], ["炼刀", "item"], ["练刀", "item"],
-    ["巨九", "item"], ["巨9", "item"], ["月光刀", "item"], ["无尽", "item"], ["转职", "item"],
-    ["觀星者", "trait"], ["观星者", "trait"], ["观星", "trait"],
-    ["九五", "game_concept"], ["95", "game_concept"], ["赌狗", "game_concept"], ["賭狗", "game_concept"],
-    ["运营", "game_concept"], ["運營", "game_concept"], ["连败", "game_concept"], ["連敗", "game_concept"],
-    ["前排装", "game_concept"], ["前排裝", "game_concept"],
-    ["阵容", "composition"], ["陣容", "composition"], ["这套", "composition"], ["這套", "composition"],
-    ["攻略视频", "video"], ["攻略視訊", "video"], ["教学视频", "video"], ["教學視訊", "video"],
-    ["当前版本", "patch"], ["當前版本", "patch"], ["这版本", "patch"], ["這版本", "patch"],
-    ["所有玩家信息", "player_context"], ["所有玩家資料", "player_context"]
-  ];
-  for (const [rawText, expectedType] of dictionary) {
-    if (text.includes(rawText)) add(rawText, expectedType);
-  }
-  const patch = text.match(/\b\d{1,2}\.\d{1,2}\b/u)?.[0];
-  if (patch) add(patch, "patch");
-  return values;
 }
 
 function constraintsFor(text) {
@@ -214,7 +187,7 @@ export async function parseSemanticTask(input, options = {}) {
     };
   }
   const action = inferAction(text, domainResult.domain, examples);
-  const entityMentions = mentions(text);
+  const entityMentions = extractEntityMentions(text, { catalog: options.catalog });
   const status = understandingStatus(text, domainResult.domain, action, entityMentions, options);
   const ambiguities = status === "understood_but_missing_context"
     ? [{ code: "missing_context", affectsResult: true }]
@@ -277,6 +250,15 @@ export async function parseSemanticTask(input, options = {}) {
     }, budget.maxLatencyMs);
     frame = createTaskFrame(response?.taskFrame ?? response);
     providerUsage = response?.usage ?? null;
+  }
+  if (options.entityLinking !== false && options.catalog) {
+    frame = await linkTaskFrameEntities(frame, {
+      catalog: options.catalog,
+      patch: options.dynamicContext?.version,
+      semanticRetriever: options.entitySemanticRetriever,
+      candidateRetriever: options.entityCandidateRetriever,
+      candidateReranker: options.entityCandidateReranker
+    });
   }
 
   const validation = validateTaskFrame(frame);
