@@ -393,6 +393,14 @@ export {
 } from "./retrieval/structured-retriever.js";
 export { runLlmRetrievalPipeline } from "./retrieval/llm-pipeline.js";
 export {
+  CONTEXT_RESOLUTION_VERSION,
+  resolveTaskFrameContext
+} from "./understanding/context-resolver.js";
+export {
+  CLARIFICATION_POLICY_VERSION,
+  applyClarificationPolicy
+} from "./understanding/ambiguity-policy.js";
+export {
   createRecommendationFromRows,
   recommendForInput,
   SESSION_LAST_QUERY_KEY

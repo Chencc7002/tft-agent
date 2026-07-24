@@ -98,6 +98,8 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
       data: {
         schemaVersion: SEMANTIC_SHADOW_EVENT_VERSION,
         difference,
+        contextResolution: semanticResult.contextResolution,
+        clarificationPolicy: semanticResult.clarificationPolicy,
         usage: semanticResult.telemetry.usage,
         parserBudget: semanticResult.telemetry.budget,
         exampleIds: semanticResult.telemetry.exampleIds,

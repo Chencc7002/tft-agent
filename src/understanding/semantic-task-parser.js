@@ -10,6 +10,8 @@ import {
   SEMANTIC_PARSER_BUDGET
 } from "./context-policy.js";
 import { createTaskFrame, validateTaskFrame } from "./task-frame.js";
+import { resolveTaskFrameContext } from "./context-resolver.js";
+import { applyClarificationPolicy } from "./ambiguity-policy.js";
 
 const ACTION_PATTERNS = Object.freeze({
   find_video: /视频|視訊|视屏|影片|b站|bilibili/iu,
@@ -216,9 +218,7 @@ export async function parseSemanticTask(input, options = {}) {
     constraints: constraintsFor(text),
     goal: goalFor(action),
     expectedOutput: outputsFor(action),
-    contextReferences: (options.conversation ?? []).length
-      ? [{ type: "conversation", messageCount: options.conversation.length }]
-      : [],
+    contextReferences: [],
     ambiguities,
     assumptions: [],
     confidence,
@@ -260,6 +260,17 @@ export async function parseSemanticTask(input, options = {}) {
       candidateReranker: options.entityCandidateReranker
     });
   }
+  const contextResolution = resolveTaskFrameContext(frame, {
+    input,
+    conversation: options.conversation,
+    defaults: options.contextDefaults
+  });
+  const clarificationPolicy = applyClarificationPolicy(
+    contextResolution.taskFrame,
+    contextResolution,
+    options.clarificationPolicy
+  );
+  frame = clarificationPolicy.taskFrame;
 
   const validation = validateTaskFrame(frame);
   if (!validation.valid) {
@@ -271,6 +282,11 @@ export async function parseSemanticTask(input, options = {}) {
     throw new RangeError("Semantic parser token budget exceeded");
   }
   const durationMs = Math.max(0, performance.now() - startedAt);
+  const resolvedStateBar = createAgentStateBar({
+    ...stateBar,
+    objective: frame.goal,
+    unresolvedAmbiguities: frame.ambiguities
+  });
   return {
     taskFrame: frame,
     telemetry: {
@@ -281,7 +297,9 @@ export async function parseSemanticTask(input, options = {}) {
       exampleIds: examples.map((example) => example.id),
       provider: typeof options.provider === "function" ? "injected" : "deterministic"
     },
-    stateBar,
+    stateBar: resolvedStateBar,
+    contextResolution,
+    clarificationPolicy,
     messages
   };
 }
