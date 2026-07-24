@@ -19,22 +19,36 @@ const CAPABILITIES = Object.freeze({
     Object.freeze({
       action: "recommend",
       requiredEntityTypes: ["champion"],
-      allowedEntityTypes: ["champion", "item", "trait", "composition"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
       goals: ["recommend_best_option"],
       outputs: ["recommendation", "ranking", "evidence"]
     }),
     Object.freeze({
       action: "compare",
       requiredEntityTypes: ["champion", "item"],
-      allowedEntityTypes: ["champion", "item", "trait", "composition"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
       goals: ["choose_best"],
       outputs: ["recommendation", "comparison", "evidence"]
     }),
     Object.freeze({
       action: "rank",
       requiredEntityTypes: ["champion"],
-      allowedEntityTypes: ["champion", "item", "trait", "composition"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
       outputs: ["ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "analyze",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["analyze_evidence"],
+      outputs: ["analysis", "ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "search",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["find_relevant_data"],
+      outputs: ["results", "ranking", "evidence"]
     })
   ]),
   unit_comp_candidates: Object.freeze([
@@ -55,14 +69,14 @@ const CAPABILITIES = Object.freeze({
   comps_rankings: Object.freeze([
     Object.freeze({
       action: "rank",
-      allowedEntityTypes: ["composition", "trait", "champion"],
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
       allowNoEntities: true,
       goals: ["rank_options"],
       outputs: ["ranking", "evidence"]
     }),
     Object.freeze({
       action: "recommend",
-      allowedEntityTypes: ["composition", "trait", "champion"],
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
       allowNoEntities: true,
       goals: ["recommend_best_option"],
       outputs: ["recommendation", "ranking", "evidence"]
@@ -71,7 +85,7 @@ const CAPABILITIES = Object.freeze({
   comps_trends: Object.freeze([
     Object.freeze({
       action: "analyze",
-      allowedEntityTypes: ["composition", "trait", "champion"],
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
       allowNoEntities: true,
       goals: ["analyze_evidence"],
       requiredConstraints: ["trend"],
@@ -81,7 +95,7 @@ const CAPABILITIES = Object.freeze({
   comps_analysis: Object.freeze([
     Object.freeze({
       action: "analyze",
-      allowedEntityTypes: ["composition", "trait", "champion"],
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
       allowNoEntities: true,
       goals: ["analyze_evidence"],
       outputs: ["analysis", "evidence"]
@@ -121,7 +135,7 @@ const CAPABILITIES = Object.freeze({
     Object.freeze({
       action: "recommend",
       requiredEntityTypes: ["game_concept"],
-      allowedEntityTypes: ["game_concept"],
+      allowedEntityTypes: ["game_concept", "composition"],
       goals: ["recommend_best_option"],
       outputs: ["recommendation", "composition_candidates", "evidence"]
     }),

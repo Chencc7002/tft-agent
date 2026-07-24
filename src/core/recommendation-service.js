@@ -167,6 +167,7 @@ function semanticTakeoverDecision(shadowResult, retrievalPlan, options = {}) {
     clarificationPolicy: shadowResult.semanticResult?.clarificationPolicy,
     capabilityMatch: shadowResult.capabilityMatch,
     taskPlanning: shadowResult.taskPlanning,
+    executionPlanning: shadowResult.executionPlanning,
     shadowDifference: shadowResult.difference,
     legacyTools: (retrievalPlan?.structuredQueries ?? []).map((query) => query.operation),
     requestKey: options.semanticTakeoverKey
@@ -185,6 +186,8 @@ function semanticTakeoverDecision(shadowResult, retrievalPlan, options = {}) {
         mode: decision.mode,
         action: decision.action,
         reason: decision.reason,
+        executionPath: decision.executionPath,
+        semanticDifference: decision.semanticDifference,
         plannedTools: decision.plannedTools,
         legacyTools: decision.legacyTools
       }
@@ -193,6 +196,73 @@ function semanticTakeoverDecision(shadowResult, retrievalPlan, options = {}) {
     // Routing observability cannot alter deterministic execution.
   }
   return decision;
+}
+
+function isMappedConceptResidue(hint, mapping) {
+  const fragment = normalizeAlias(hint?.inputFragment);
+  const mention = normalizeAlias(mapping?.mention);
+  if (!fragment || !mention) return false;
+  const genericSuffixes = ["阵容", "体系"];
+  const residue = genericSuffixes.reduce(
+    (value, suffix) => value.endsWith(suffix) ? value.slice(0, -suffix.length) : value,
+    fragment
+  );
+  return Boolean(residue && (mention.endsWith(residue) || residue.endsWith(mention)));
+}
+
+function applyControlledSemanticCorrection(parsed, shadowResult, options = {}) {
+  if (
+    options.semanticTakeover === false
+    || shadowResult?.status !== "completed"
+    || shadowResult.executionPlanning?.plan?.route !== "semantic_correction"
+  ) return parsed;
+  const executionTools = (shadowResult.executionPlanning.plan.steps ?? []).map((step) => step.tool);
+  const decision = createTakeoverDecision({
+    taskFrame: shadowResult.semanticResult?.taskFrame,
+    clarificationPolicy: shadowResult.semanticResult?.clarificationPolicy,
+    capabilityMatch: shadowResult.capabilityMatch,
+    taskPlanning: shadowResult.taskPlanning,
+    executionPlanning: shadowResult.executionPlanning,
+    shadowDifference: shadowResult.difference,
+    legacyTools: executionTools,
+    legacyUnsupported: true,
+    requestKey: options.semanticTakeoverKey
+      ?? options.sessionKey
+      ?? options.conversationId
+      ?? "default",
+    policy: options.semanticTakeoverPolicy
+  });
+  if (decision.route !== "semantic_correction") return parsed;
+  const mapping = shadowResult.executionPlanning.plan.conceptMapping;
+  if (
+    mapping?.conceptId !== "concept.strategy.fast9_nine_five"
+    || executionTools.length !== 1
+    || executionTools[0] !== "comps_rankings"
+  ) return parsed;
+  const currentHints = asArray(parsed?.parser?.unresolvedEntityHints);
+  const remainingHints = currentHints.filter((hint) => !isMappedConceptResidue(hint, mapping));
+  const semanticLimit = shadowResult.semanticResult?.taskFrame?.constraints?.limit;
+  return {
+    ...parsed,
+    intent: "comp_rankings",
+    preferenceRequested: true,
+    preferenceConditions: {
+      ...(parsed.preferenceConditions ?? {}),
+      strategy: "fast9",
+      ...(Number.isInteger(semanticLimit) ? { count: semanticLimit } : {})
+    },
+    parser: {
+      ...(parsed.parser ?? {}),
+      unresolvedEntityHints: remainingHints,
+      semanticCorrection: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        executionPath: decision.executionPath,
+        conceptId: mapping.conceptId,
+        queryCapability: mapping.queryCapability
+      }
+    }
+  };
 }
 
 function attachSemanticTakeover(result, decision, outcome = {}) {
@@ -206,6 +276,8 @@ function attachSemanticTakeover(result, decision, outcome = {}) {
         mode: decision.mode,
         action: decision.action,
         reason: decision.reason,
+        executionPath: decision.executionPath,
+        semanticDifference: decision.semanticDifference,
         plannedTools: decision.plannedTools,
         legacyTools: decision.legacyTools
       }
@@ -1590,6 +1662,7 @@ export async function recommendForInput(input, options = {}) {
     }
     : inheritCompRankingFromSession(parsedInput, initialSessionEntry?.value, options);
   parsedInput = compSessionMerge.parsed;
+  parsedInput = applyControlledSemanticCorrection(parsedInput, semanticShadowResult, options);
 
   if (isCompIntent(parsedInput.intent)) {
     const query = buildCompRankingQuery(parsedInput, {

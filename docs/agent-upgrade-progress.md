@@ -2,11 +2,11 @@
 
 ## Current
 
-- phase: 6
+- phase: 6.5
 - status: completed
 - branch: codex/wechat-mobile-chat
-- baseline_commit: d9416b0
-- latest_verified_commit: bcaeeee
+- baseline_commit: ea7617c
+- latest_verified_commit: this_phase_commit
 
 ## Completed gates
 
@@ -46,6 +46,14 @@
 - live LLM: T2 20/20 requests; structured output 100%; domain/action 95% / 95%; entity recall 92.31%; Token/latency budgets 100%; 0 retries
 - report: `docs/reports/phase-6-semantic-takeover.md`, `docs/reports/phase-6-semantic-takeover.json`
 
+- phase: 6.5
+- tests: final `node --test` — 620 total / 600 passed / 0 failed / 20 skipped; phase-4/5/6/6.5 evaluations passed with 120 / 190 / 600 / 360 runs
+- metrics: `semantic-gap-phase65.v1` — 120 cases × 3 runs; classification and routing 100%; arbitrary tool calls 0; Pass@3 and Pass^3 100%
+- real LLM T3: `live-llm-t3-independent.v2` — 120 independent cases × 3 runs; exact Few-shot overlap 0; request success 100%; controlled fallback 0.56%; Pass@3 99.17%; Pass^3 95.83%
+- T3 quality: domain/action/status 100% / 100% / 98.61%; entity mention/Top-1 100% / 100%; tool selection 98.06%; clarification 99.17%; token and latency budgets 100%
+- safety: legacy equivalent and fallback paths retained; `RetrievalPlan` retained; ExecutionPlan allows only registered first-party read-only tools; arbitrary tools and video tools remain disabled; no real canary was started
+- report: `docs/reports/phase-6-5-semantic-correction.md`, `docs/reports/phase-6-5-semantic-correction.json`, `docs/reports/phase-6-5-live-llm-t3.md`, `docs/reports/phase-6-5-live-llm-t3.json`
+
 - acceptance audit: phases 0-3
 - artifact verification: phase reports are tracked and linked to implementation/verification commits `f551390`, `bfcaa5e`, `3c72699`, `2d16226`, `0d25453`, `fe84785`, `8b676fe`, `4996a7d`
 - real LLM: existing one-query `smoke:llm` passed; new T2 `eval:llm:live` passed 20/20 strict requests with `chat` / `deepseek-v4-flash`
@@ -56,17 +64,17 @@
 
 ## Current work
 
-- objective: phases 4-6 complete; semantic routing is gated by action order, exact registered-tool compatibility and legacy fallback
-- files: `src/agent/takeover-controller.js`, recommendation-route integration, phase-6 evaluation dataset/runner/tests and reports
+- objective: phase 6.5 semantic-correction takeover and real-LLM T3 complete
+- files: semantic difference classifier, concept capability map, ExecutionPlan compiler/validator, controlled recommendation integration, phase-6.5 and T3 datasets/runners/tests/reports
 - assumptions: deterministic statistics, ranking, evidence and conclusion rules remain authoritative; production deployment and real traffic rollout were not authorized; the untracked master-plan file remains user-owned and untouched
 
 ## Blockers
 
 - blocker: none
-- evidence: no master-plan blocking condition was triggered; phase 6 offline, shadow, canary replay, stability, full regression, prior evaluation, smoke and live-LLM T2 gates passed
+- evidence: no master-plan blocking condition was triggered; phase 6.5 offline, compatibility, safety, stability, full regression and real-LLM T3 gates passed
 - user_input_needed: none
 
 ## Next
 
-- next_step: stop after the requested phase 4-6 report; phase 7 video tools require a separate continuation request and any needed platform access decision
-- required_checks: before phase 7, confirm external platform access method only if the implementation reaches the master-plan credential or paid-service blocker
+- next_step: real canary is now eligible but remains stopped until separately authorized; do not enter video-tool development under the phase-6.5 acceptance scope
+- required_checks: preserve first-party read-only allowlisting, monitor controlled fallback and T3 stability, and obtain separate authorization before any production canary

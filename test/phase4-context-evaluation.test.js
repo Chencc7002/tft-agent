@@ -56,6 +56,47 @@ test("phase 4 asks one relevant question and restates the understood goal when c
   assert.equal(Object.hasOwn(clarification, "suggestions"), false);
 });
 
+test("phase 4 generic continuations inherit prior concepts and owned items", () => {
+  const conceptPrior = createTaskFrame({
+    action: "recommend",
+    concepts: [{
+      rawText: "95",
+      expectedType: "game_concept",
+      resolvedId: "concept.strategy.fast9_nine_five",
+      confidence: 1
+    }],
+    goal: "recommend_best_option",
+    understandingStatus: "understood_and_supported"
+  });
+  const conceptResolution = resolveTaskFrameContext(createTaskFrame({
+    action: "rank",
+    goal: "rank_options",
+    understandingStatus: "understood_and_supported"
+  }), {
+    input: "那按当前强度排一下",
+    conversation: [{ taskFrame: conceptPrior }]
+  });
+  assert.equal(conceptResolution.taskFrame.concepts[0].resolvedId, "concept.strategy.fast9_nine_five");
+
+  const itemPrior = createTaskFrame({
+    action: "search",
+    subjects: [{ rawText: "霞", expectedType: "champion", resolvedId: "xayah", confidence: 1 }],
+    candidates: [{ rawText: "巨九", expectedType: "item", resolvedId: "hydra", confidence: 1 }],
+    goal: "find_relevant_data",
+    understandingStatus: "understood_and_supported"
+  });
+  const itemResolution = resolveTaskFrameContext(createTaskFrame({
+    action: "recommend",
+    goal: "recommend_best_option",
+    understandingStatus: "understood_and_supported"
+  }), {
+    input: "那再推荐两件装备",
+    conversation: [{ taskFrame: itemPrior }]
+  });
+  assert.equal(itemResolution.taskFrame.subjects[0].resolvedId, "xayah");
+  assert.equal(itemResolution.taskFrame.candidates[0].resolvedId, "hydra");
+});
+
 test("phase 4 evaluation enforces reference and clarification gates", async () => {
   const report = await runPhase4Evaluation();
   assert.equal(report.passed, true);

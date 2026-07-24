@@ -220,11 +220,16 @@ export async function linkEntityMention(entity = {}, options = {}) {
   if (expectedType === "game_concept") return resolveGameConcept(rawText);
   if (!TYPE_MAP[expectedType]) return passthroughEntity({ rawText, expectedType }, version);
 
+  const exactOnly = entity.source === "quoted_unknown_entity";
   let candidates = deterministicCandidates(rawText, expectedType, options.catalog, version);
-  if (!candidates.length) {
+  if (!candidates.length && !exactOnly) {
     candidates = fuzzyCandidates(rawText, expectedType, options.catalog, version, options);
   }
-  if (!resolveUnique(candidates, options) && typeof options.semanticRetriever?.search === "function") {
+  if (
+    !exactOnly
+    && !resolveUnique(candidates, options)
+    && typeof options.semanticRetriever?.search === "function"
+  ) {
     candidates = deduplicateCandidates([
       ...candidates,
       ...await semanticCandidates(rawText, expectedType, options.catalog, version, options)

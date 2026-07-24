@@ -53,5 +53,21 @@ export function extractEntityMentions(input, options = {}) {
   }
   const patch = text.match(/\b\d{1,2}\.\d{1,2}\b/u)?.[0];
   if (patch) pushUnique(values, patch, "patch", "patch_pattern");
+  const quotedChampion = text.match(
+    /(?:\u82f1\u96c4|\u5f08\u5b50|\u68cb\u5b50)\s*[\u201c\u300c\u300e"]([^"\u201d\u300d\u300f]{2,16})["\u201d\u300d\u300f]/u
+  )?.[1];
+  if (quotedChampion) {
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      const value = values[index];
+      if (
+        value.source === "catalog_span"
+        && normalizeText(quotedChampion).includes(normalizeText(value.rawText))
+        && normalizeText(quotedChampion) !== normalizeText(value.rawText)
+      ) {
+        values.splice(index, 1);
+      }
+    }
+    pushUnique(values, quotedChampion, "champion", "quoted_unknown_entity");
+  }
   return values;
 }

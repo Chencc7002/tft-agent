@@ -52,7 +52,7 @@ test("chat semantic task provider validates raw TaskFrame and maps provider usag
     budget: { maxOutputTokens: 300 }
   });
 
-  assert.equal(LIVE_SEMANTIC_TASK_PROMPT_VERSION, "live-semantic-task-contract.v2");
+  assert.equal(LIVE_SEMANTIC_TASK_PROMPT_VERSION, "live-semantic-task-contract.v5");
   assert.equal(observedBody.response_format.type, "json_object");
   assert.equal(observedBody.max_tokens, 300);
   assert.deepEqual(result.taskFrame, validFrame);

@@ -4,6 +4,7 @@ import { matchTaskCapabilities } from "./capability-matcher.js";
 import { createStructuredToolDefinitions } from "../agent/tools/definitions.js";
 import { ToolRegistry } from "../agent/tools/registry.js";
 import { planTask } from "../agent/task-planner.js";
+import { compileExecutionPlan } from "../agent/execution-plan.js";
 
 export const SEMANTIC_SHADOW_EVENT_VERSION = "semantic-shadow-event.v1";
 const DEFAULT_TOOL_REGISTRY = new ToolRegistry(createStructuredToolDefinitions());
@@ -91,6 +92,19 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
         maxPlannerTokens: Number(options.plannerTokenBudget ?? 600)
       }
     });
+    const executionPlanning = compileExecutionPlan(
+      semanticResult.taskFrame,
+      capabilityMatch,
+      taskPlanning,
+      {
+        registry: toolRegistry,
+        budget: {
+          maxSteps: Math.min(3, Number(options.agentRun?.budget?.maxSteps ?? 3)),
+          maxToolCalls: Math.min(3, Number(options.agentRun?.budget?.maxToolCalls ?? 3)),
+          maxPlanTokens: Number(options.executionPlanTokenBudget ?? 800)
+        }
+      }
+    );
     const difference = compareSemanticShadow(legacyParsed, semanticResult);
     const stateBar = createAgentStateBar({
       ...semanticResult.stateBar,
@@ -122,6 +136,8 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
         capabilityMatch,
         taskPlan: taskPlanning.plan,
         taskPlanValidation: taskPlanning.validation,
+        executionPlan: executionPlanning.plan,
+        executionPlanValidation: executionPlanning.validation,
         usage: semanticResult.telemetry.usage,
         parserBudget: semanticResult.telemetry.budget,
         exampleIds: semanticResult.telemetry.exampleIds,
@@ -134,7 +150,8 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
       difference,
       stateBar,
       capabilityMatch,
-      taskPlanning
+      taskPlanning,
+      executionPlanning
     };
   } catch (error) {
     safeEmit(options.agentRun, {

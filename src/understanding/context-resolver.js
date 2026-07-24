@@ -18,6 +18,9 @@ const LEGACY_ACTIONS = Object.freeze({
   comp_analysis: "analyze"
 });
 
+const DEICTIC_REFERENCE = /(?:\u90a3(?:\u5979|\u4ed6|\u5b83|\u4ef6|\u5957|\u4e2a|\u8fd9\u4fe9)|\u8fd9(?:\u5f20\u5361|\u4ef6|\u4fe9|\u5957|\u4e2a\u73a9\u6cd5)|\u5b83|\u5979|\u4ed6|\u521a\u624d|\u4e0a\u4e00\u4e2a|\u53e6\u4e00\u4e2a|\u7ee7\u7eed|\u518d\u6765|\u6309\u521a\u624d)/u;
+const DEICTIC_ENTITY = /^(?:那(?:她|他|它|件|套|个)|这(?:张卡|件|俩|套|个玩法)|它|她|他|另一个|另一件装备|这俩)$/u;
+
 const PLURAL_REFERENCE = /这(?:两|2)个|這(?:兩|2)個|这俩|這倆|那(?:两|2)个|那(?:兩|2)個|它们|它們/u;
 const COMPOSITION_REFERENCE = /(?:这|這|那|刚才|剛才|之前).{0,4}(?:套|阵容|陣容)/u;
 const SPECIFIC_CONTINUATION = /^(?:那|再看|还有|還有|换成|換成|改成).{1,20}(?:呢|怎么样|怎麼樣|如何)?[？?]?$/u;
@@ -96,10 +99,15 @@ function latestFrame(conversation) {
 function referenceKinds(input) {
   const text = String(input ?? "").trim();
   return {
-    plural: PLURAL_REFERENCE.test(text),
-    composition: COMPOSITION_REFERENCE.test(text),
+    plural: (
+      PLURAL_REFERENCE.test(text)
+      || /(?:\u8fd9|\u90a3)(?:\u4fe9|\u4e24\u4e2a)|\u5b83\u4eec|\u8fd9\u4e9b|\u90a3\u4e9b/u.test(text)
+    ) && !/(?:\u4e09\u4ef6\u5957|\u4e09\u4ef6\u88c5\u5907)/u.test(text),
+    composition: COMPOSITION_REFERENCE.test(text)
+      && !/(?:\u4e09\u4ef6\u5957|\u88c5\u5907\u5957\u88c5)/u.test(text),
     specific: SPECIFIC_CONTINUATION.test(text),
-    generic: GENERIC_CONTINUATION.test(text)
+    generic: GENERIC_CONTINUATION.test(text),
+    deictic: DEICTIC_REFERENCE.test(text)
   };
 }
 
@@ -145,15 +153,50 @@ export function resolveTaskFrameContext(taskFrame, options = {}) {
   let candidates = uniqueEntities(current.candidates);
   let concepts = uniqueEntities(current.concepts);
   let action = current.action;
+  let domain = current.domain;
+  let understandingStatus = current.understandingStatus;
   let ambiguities = array(current.ambiguities).map((entry) => structuredClone(entry));
 
   if (wantsContext && prior) {
+    const isPlaceholder = (entity) => (
+      !entity?.resolvedId && DEICTIC_ENTITY.test(String(entity?.rawText ?? "").trim())
+    );
+    const removedPlaceholders = [
+      ...subjects.filter(isPlaceholder),
+      ...candidates.filter(isPlaceholder),
+      ...concepts.filter(isPlaceholder)
+    ];
+    subjects = subjects.filter((entity) => !isPlaceholder(entity));
+    candidates = candidates.filter((entity) => !isPlaceholder(entity));
+    concepts = concepts.filter((entity) => !isPlaceholder(entity));
+    if (removedPlaceholders.length > 0) {
+      ambiguities = ambiguities.filter((entry) => (
+        entry?.code !== "ambiguous_entity"
+        || array(entry.candidates).some((candidate) => !DEICTIC_ENTITY.test(
+          String(candidate?.rawText ?? "").trim()
+        ))
+      ));
+    }
     const previous = prior.frame;
+    if (domain === "out_of_domain" && previous.domain === "tft") {
+      domain = "tft";
+      understandingStatus = previous.understandingStatus === "out_of_domain"
+        ? "understood_and_supported"
+        : previous.understandingStatus;
+      inheritedFields.push("domain");
+    }
     if (subjects.length === 0 && previous.subjects.length > 0) {
       subjects = uniqueEntities(previous.subjects);
       inheritedFields.push("subjects");
     }
     if (references.plural && candidates.length === 0 && previous.candidates.length >= 2) {
+      candidates = uniqueEntities(previous.candidates);
+      inheritedFields.push("candidates");
+    } else if (
+      (references.deictic || references.generic)
+      && candidates.length === 0
+      && previous.candidates.length > 0
+    ) {
       candidates = uniqueEntities(previous.candidates);
       inheritedFields.push("candidates");
     } else if (references.specific && candidates.length > 0 && previous.candidates.length > 0) {
@@ -166,8 +209,21 @@ export function resolveTaskFrameContext(taskFrame, options = {}) {
         concepts = uniqueEntities([...concepts, ...previousCompositions]);
         inheritedFields.push("concepts");
       }
+    } else if (
+      (references.deictic || references.generic)
+      && previous.concepts.length > 0
+      && concepts.every((entity) => (
+        !entity?.resolvedId
+        && /^(?:阵容|陣容|体系|玩法)$/u.test(String(entity?.rawText ?? ""))
+      ))
+    ) {
+      concepts = uniqueEntities([...concepts, ...previous.concepts]);
+      inheritedFields.push("concepts");
     }
-    if ((references.generic || references.composition || references.plural) && action === "unknown") {
+    if (
+      (references.generic || references.composition || references.plural || references.deictic)
+      && action === "unknown"
+    ) {
       action = previous.action;
       inheritedFields.push("action");
     }
@@ -190,7 +246,17 @@ export function resolveTaskFrameContext(taskFrame, options = {}) {
   applyDefaults(inheritedConstraints.constraints, inheritedConstraints.fieldSources, options.defaults);
 
   const missingFields = [];
-  if (wantsContext && !prior) missingFields.push("conversation");
+  const explicitResolvedEntities = [...subjects, ...candidates, ...concepts]
+    .filter((entity) => Boolean(entity?.resolvedId));
+  const deicticAlreadyGrounded = references.deictic
+    && (
+      explicitResolvedEntities.length >= 2
+      || (
+        current.action === "compare"
+        && candidates.filter((entity) => Boolean(entity?.resolvedId)).length >= 2
+      )
+    );
+  if (wantsContext && !prior && !deicticAlreadyGrounded) missingFields.push("conversation");
   if (references.plural && candidates.length < 2) missingFields.push("candidate_group");
   if (references.composition && concepts.every((entity) => entity.expectedType !== "composition")) {
     missingFields.push("composition");
@@ -203,9 +269,22 @@ export function resolveTaskFrameContext(taskFrame, options = {}) {
   } else if (resolvedReferences.length > 0) {
     ambiguities = ambiguities.filter((entry) => !["missing_context", "missing_context_reference"].includes(entry?.code));
   }
+  if (
+    references.plural
+    && prior
+    && current.action === "compare"
+    && candidates.filter((entity) => Boolean(entity?.resolvedId)).length >= 2
+  ) {
+    ambiguities = ambiguities.filter((entry) => (
+      entry?.code === "conflicting_constraints"
+      || !entry?.affectsToolSelection
+    ));
+    understandingStatus = "understood_and_supported";
+  }
 
   const taskFrameValue = createTaskFrame({
     ...current,
+    domain,
     action,
     subjects,
     candidates,
@@ -215,9 +294,13 @@ export function resolveTaskFrameContext(taskFrame, options = {}) {
     ambiguities,
     understandingStatus: missingFields.length > 0
       ? "understood_but_missing_context"
-      : current.understandingStatus === "understood_but_missing_context" && resolvedReferences.length > 0
+      : understandingStatus === "understood_but_missing_context" && resolvedReferences.length > 0
         ? "understood_and_supported"
-        : current.understandingStatus
+        : understandingStatus === "ambiguous"
+          && resolvedReferences.length > 0
+          && ambiguities.length === 0
+          ? "understood_and_supported"
+        : understandingStatus
   });
 
   return {

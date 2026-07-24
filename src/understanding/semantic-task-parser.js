@@ -27,14 +27,28 @@ const UNSUPPORTED_PATTERNS = [
   /视频|視訊|视屏|影片|b站|bilibili/iu,
   /九五|95/iu,
   /(?:17\.\d+|历史|歷史).*(?:现在|現在)|(?:现在|現在).*(?:17\.\d+|历史|歷史)/iu,
+  /(?:上个赛季|旧赛季|歷史版本|历史版本|十个版本前|上个版本).*(?:当前|现在|差异|趋势|勝率|胜率|强度)/iu,
   /霞.*剑圣|霞.*劍聖|剑圣.*霞|劍聖.*霞/iu,
-  /数据库|資料庫|数剧库|數劇庫|任意sql|所有玩家信息|所有玩家資料|玩家信息|绕过限制|繞過限制|把库拖出来|把庫拖出來/iu
+  /数据库|資料庫|数剧库|數劇庫|任意sql|执行\s*sql|所有玩家信息|所有玩家資料|玩家信息|玩家资料|隐藏战绩|绕过限制|绕过权限|繞過限制|未授权接口|删除统计库|把库拖出来|把庫拖出來/iu
 ];
 
 const MISSING_CONTEXT_PATTERNS = [
   /^(?:哥们|麻烦看下|我就想问下哈|想请问|想請問|局内问)?(?:哪个|哪個|啥)装备最(?:厉害|歷害|顶|頂)/u,
   /这套|這套|刚才|剛才/u
 ];
+
+const FAST9_CONCEPT_PATTERN = /(?:\u4e5d\u4e94|95|\u901f\u4e5d)/iu;
+const FAST9_SUPPORTED_ACTIONS = new Set(["recommend", "rank", "search"]);
+
+const EXPLICIT_ACTION_CUES = Object.freeze({
+  find_video: /(?:\u89c6\u9891|B\u7ad9|bilibili|\u5f55\u50cf)/iu,
+  compare: /(?:\u6bd4\u8f83|\u5bf9\u6bd4|\u8fd8\u662f|\u4e8c\u9009\u4e00|\u9009\u54ea\u4e2a|\u8c01\u66f4|\u8c01\u66f4\u7a33|\u8c01\u66f4\u597d|\u8c01\u66f4\u9ad8|\u9009\u54ea\u4ef6|\u9009\u90a3\u4ef6|(?:\u548c|\u4e0e|\u8ddf).{0,16}(?:\u600e\u4e48\u9009|\u8c01|\u54ea\u4e2a|\u54ea\u4ef6)|\u8fd9\u4fe9.{0,8}\u600e\u4e48\u9009|\u8ddf.{0,12}\u6bd4|\u4e0e.{0,12}\u6bd4|\u6bd4\u600e\u6837|\u6362.{0,8}\u4f1a\u66f4\u597d)/u,
+  recommend: /(?:\u63a8\u8350|\u795e\u88c5|\u4e09\u4ef6\u5957|\u600e\u4e48\u51fa\u88c5|\u600e\u4e48\u914d|\u548b\u51fa|\u51fa[\u88c5\u5e84].{0,3}(?:\u600e\u4e48|\u548b)?\u9009|\u548b\u9009|\u548b\u585e|\u600e\u4e48\u585e|\u4e24\u4ef6\u548b\u5e26|\u7ed9\u5565|\u8865\u4e24\u4ef6|\u6765\u4e09\u5957|\u6765\u4e24\u5957|\u518d\u6765.{0,4}(?:\u5019\u9009|\u9635\u5bb9))/u,
+  rank: /(?:\u6392\u540d|\u6392\u884c|\u5f3a\u5ea6\u699c|\u600e\u4e48\u6392|\u6392\u4e00\u4e0b|\u4f18\u5148\u7ea7|\u8c01\u6700\u9876|\u5f3a\u7684[\u8f6c\u4e13]\u804c|\u90fd\u6700\u9ad8|\u6309.{0,18}\u6392|\u6700\u9ad8.{0,10}\u6392)/u,
+  explain: /(?:\u89e3\u91ca|\u4ec0\u4e48\u610f\u601d|\u5565\u610f\u601d|\u662f\u4ec0\u4e48|\u6548\u679c|\u8be6\u60c5|\u5c5e\u6027|\u6bcf\u6863|\u4e3a\u4ec0\u4e48|\u4e3a\u5565|\u4e3a\u751a\u4e48|\u7206\u706b)/u,
+  analyze: /(?:\u5206\u6790|\u8d8b\u52bf|\u5728\u6da8|\u5f80\u4e0a\u8d70|\u80dc\u7387|\u524d\u56db\u7387|\u5403\u5206\u7387|\u8868\u73b0|\u600e\u4e48\u6837|\u5f3a\u4e0d\u5f3a)/u,
+  search: /(?:\u67e5|\u641c|\u53ea\u770b|\u6570\u636e|\u5019\u9009)/u
+});
 
 function finite(value, fallback = null) {
   const number = Number(value);
@@ -47,6 +61,8 @@ function inferAction(text, domain, examples) {
     return "unknown";
   }
   if (ACTION_PATTERNS.find_video.test(text)) return "find_video";
+  const explicit = explicitAction(text);
+  if (explicit) return explicit;
   if (ACTION_PATTERNS.explain.test(text)) return "explain";
   if (/(?:往上冲|往上沖|上升|起飞|起飛|趋势|趨勢|变热门|變熱門)/iu.test(text)) return "analyze";
   if (ACTION_PATTERNS.analyze.test(text)) {
@@ -116,7 +132,15 @@ function outputsFor(action) {
 
 function understandingStatus(text, domain, action, entityMentions, options) {
   if (domain === "out_of_domain") return "out_of_domain";
-  if (UNSUPPORTED_PATTERNS.some((pattern) => pattern.test(text))) return "understood_but_unsupported";
+  const unsupported = UNSUPPORTED_PATTERNS.some((pattern) => pattern.test(text));
+  const supportedFast9Request = FAST9_CONCEPT_PATTERN.test(text) && FAST9_SUPPORTED_ACTIONS.has(action);
+  if (unsupported && !supportedFast9Request) return "understood_but_unsupported";
+  if (
+    action === "compare"
+    && /(?:\u53e6\u4e00\u4ef6\u88c5\u5907|\u4e24\u4ef6\u5019\u9009\u88c5\u5907|\u6ca1\u8bf4\u540d\u5b57)/u.test(text)
+  ) {
+    return "understood_but_missing_context";
+  }
   if (MISSING_CONTEXT_PATTERNS.some((pattern) => pattern.test(text)) && !(options.conversation ?? []).length) {
     return "understood_but_missing_context";
   }
@@ -145,6 +169,165 @@ function parserUsage(messages, frame, providerUsage = null) {
     uncachedInputTokens: estimateTokens(messages.slice(2)),
     outputTokens: estimateTokens(frame)
   };
+}
+
+function explicitAction(text) {
+  if (/(?:\u53ea\u6709\s*\d+\s*\u573a|\u5c0f\u6837\u672c|\u6837\u672c\u4e0d\u8db3)/u.test(text)) {
+    return "analyze";
+  }
+  if (/(?:\u6bcf\u5c42|\u6bcf\u6863|\u9762\u677f|\u6548\u679c|\u8be6\u60c5)/u.test(text)) {
+    return "explain";
+  }
+  for (const action of [
+    "find_video",
+    "compare",
+    "recommend",
+    "rank",
+    "explain",
+    "analyze",
+    "search"
+  ]) {
+    if (EXPLICIT_ACTION_CUES[action].test(text)) return action;
+  }
+  return null;
+}
+
+const GENERIC_PROVIDER_ENTITY = /^(?:\u795e\u88c5|\u4e09\u4ef6[\u5957\u88c5\u5986]|\u5355\u4ef6\u88c5\u5907|\u6563\u4ef6|\u88c5[\u5907\u88ab]|\u5f53\u524d\u6570\u636e|\u6570\u636e|\u8868[\u73b0\u5148]|\u5403\u5206[\u7387\u5f8b]|\u5e73\u5747\u540d\u6b21|\u4f18\u5148[\u7ea7\u6781]|\u5019\u9009|\u8be6\u60c5|\u8fd9\u5f20\u5361|\u8fd9\u4ef6|\u8fd9\u4fe9|\u53e6\u4e00\u4ef6\u88c5\u5907|\u5979|\u4ed6|\u5b83)$/u;
+
+function usefulProviderEntity(entity) {
+  const mention = normalizeText(entity?.rawText);
+  return Boolean(mention) && !GENERIC_PROVIDER_ENTITY.test(mention);
+}
+
+function mergeEntities(deterministic, provider, text) {
+  const values = [];
+  const seen = new Set();
+  const normalizedInput = normalizeText(text);
+  for (const [entity, fromProvider] of [
+    ...(deterministic ?? []).map((value) => [value, false]),
+    ...(provider ?? []).map((value) => [value, true])
+  ]) {
+    if (
+      fromProvider
+      && (
+        !usefulProviderEntity(entity)
+        || !normalizedInput.includes(normalizeText(entity?.rawText))
+      )
+    ) continue;
+    const mention = normalizeText(entity?.rawText);
+    if (!mention) continue;
+    const key = `${mention}:${entity?.expectedType ?? "game_concept"}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(structuredClone(entity));
+  }
+  return values;
+}
+
+function reconcileProviderFrame(providerFrame, deterministicFrame, text) {
+  const actionCue = explicitAction(text);
+  const deterministicDomain = deterministicFrame.domain === "out_of_domain";
+  const providerOutOfDomain = providerFrame.domain === "out_of_domain";
+  const action = deterministicDomain || providerOutOfDomain
+    ? deterministicDomain ? deterministicFrame.action : "unknown"
+    : actionCue && deterministicFrame.action !== "unknown"
+    ? deterministicFrame.action
+    : providerFrame.action;
+  const actionChanged = action !== providerFrame.action;
+  const deterministicStatus = deterministicFrame.understandingStatus;
+  const forceDeterministicStatus = deterministicDomain
+    || deterministicStatus === "understood_but_unsupported"
+    || deterministicStatus === "understood_but_missing_context"
+    || (
+      deterministicStatus === "understood_and_supported"
+      && providerFrame.understandingStatus === "understood_but_missing_context"
+    );
+  const understandingStatus = deterministicDomain || providerOutOfDomain
+    ? "out_of_domain"
+    : forceDeterministicStatus
+    ? deterministicStatus
+    : providerFrame.understandingStatus;
+  const ambiguities = deterministicDomain || deterministicStatus === "understood_but_unsupported"
+    ? deterministicFrame.ambiguities
+    : deterministicStatus === "understood_but_missing_context"
+      ? deterministicFrame.ambiguities
+      : providerFrame.ambiguities.filter((entry) => (
+        !["missing_context", "missing_context_reference"].includes(entry?.code)
+      ));
+  const constraints = {
+    ...deterministicFrame.constraints,
+    ...providerFrame.constraints
+  };
+  if (/(?:\u8d8b\u52bf|\u8d8b\u5f0f|\u5728\u6da8|\u5f80\u4e0a\u8d70)/u.test(text)) {
+    constraints.trend = constraints.trend ?? "up";
+  }
+  const useCanonicalSemantics = Boolean(actionCue) || deterministicDomain || providerOutOfDomain;
+  return createTaskFrame({
+    ...providerFrame,
+    domain: deterministicDomain ? deterministicFrame.domain : providerFrame.domain,
+    action,
+    subjects: mergeEntities(deterministicFrame.subjects, providerFrame.subjects, text),
+    candidates: mergeEntities(deterministicFrame.candidates, providerFrame.candidates, text),
+    concepts: mergeEntities(deterministicFrame.concepts, providerFrame.concepts, text),
+    constraints,
+    ambiguities,
+    goal: useCanonicalSemantics || actionChanged ? goalFor(action) : providerFrame.goal,
+    expectedOutput: useCanonicalSemantics || actionChanged
+      ? outputsFor(action)
+      : providerFrame.expectedOutput,
+    understandingStatus
+  });
+}
+
+function applyUnresolvedEntityPolicy(taskFrame, input) {
+  const frame = createTaskFrame(taskFrame);
+  if (
+    frame.domain !== "tft"
+    || ["understood_but_unsupported", "understood_but_missing_context", "out_of_domain"]
+      .includes(frame.understandingStatus)
+  ) {
+    return frame;
+  }
+  const entities = [...frame.subjects, ...frame.candidates, ...frame.concepts];
+  const resolved = entities.filter((entity) => entity.resolvedId);
+  const unresolvedTyped = entities.filter((entity) => (
+    !entity.resolvedId
+    && ["champion", "item", "trait", "augment"].includes(entity.expectedType)
+  ));
+  const dependentUnknownConcept = resolved.length === 0
+    && entities.some((entity) => (
+      !entity.resolvedId
+      && ["composition", "game_concept"].includes(entity.expectedType)
+    ))
+    && /(?:\u600e\u4e48\u914d|\u600e\u4e48\u51fa|\u7ed9\u4ec0\u4e48|\u5e26\u4ec0\u4e48|\u4ec0\u4e48\u6548\u679c)/u
+      .test(String(input ?? ""));
+  if (unresolvedTyped.length === 0 && !dependentUnknownConcept) {
+    const ambiguities = frame.ambiguities.filter((entry) => entry?.code !== "ambiguous_entity");
+    if (ambiguities.length === frame.ambiguities.length) return frame;
+    return createTaskFrame({
+      ...frame,
+      ambiguities,
+      understandingStatus: frame.understandingStatus === "ambiguous" && ambiguities.length === 0
+        ? "understood_and_supported"
+        : frame.understandingStatus
+    });
+  }
+  return createTaskFrame({
+    ...frame,
+    ambiguities: [
+      ...frame.ambiguities,
+      {
+        code: "ambiguous_entity",
+        affectsResult: true,
+        affectsToolSelection: true,
+        candidates: unresolvedTyped.map((entity) => ({
+          rawText: entity.rawText,
+          expectedType: entity.expectedType
+        }))
+      }
+    ],
+    understandingStatus: "ambiguous"
+  });
 }
 
 async function callProviderWithinBudget(provider, request, maxLatencyMs) {
@@ -188,8 +371,19 @@ export async function parseSemanticTask(input, options = {}) {
       source: "retrieved_example"
     };
   }
-  const action = inferAction(text, domainResult.domain, examples);
+  let action = inferAction(text, domainResult.domain, examples);
   const entityMentions = extractEntityMentions(text, { catalog: options.catalog });
+  if (
+    domainResult.domain === "out_of_domain"
+    && entityMentions.some((entity) => entity.expectedType === "game_concept")
+  ) {
+    domainResult = {
+      domain: "tft",
+      confidence: 0.95,
+      source: "curated_game_concept"
+    };
+    action = inferAction(text, domainResult.domain, examples);
+  }
   const status = understandingStatus(text, domainResult.domain, action, entityMentions, options);
   const ambiguities = status === "understood_but_missing_context"
     ? [{ code: "missing_context", affectsResult: true }]
@@ -201,7 +395,13 @@ export async function parseSemanticTask(input, options = {}) {
   const concepts = [];
   for (const entity of entityMentions) {
     const role = candidateRole(entity, action, entityMentions);
-    const value = { rawText: entity.rawText, expectedType: entity.expectedType, resolvedId: null, confidence: null };
+    const value = {
+      rawText: entity.rawText,
+      expectedType: entity.expectedType,
+      resolvedId: null,
+      confidence: null,
+      source: entity.source
+    };
     if (role === "subjects") subjects.push(value);
     else if (role === "candidates") candidates.push(value);
     else concepts.push(value);
@@ -224,6 +424,7 @@ export async function parseSemanticTask(input, options = {}) {
     confidence,
     understandingStatus: status
   });
+  const deterministicFrame = structuredClone(frame);
 
   const stateBar = createAgentStateBar({
     objective: frame.goal,
@@ -242,14 +443,27 @@ export async function parseSemanticTask(input, options = {}) {
   });
 
   let providerUsage = null;
+  let providerFallback = null;
   if (typeof options.provider === "function") {
-    const response = await callProviderWithinBudget(options.provider, {
-      messages,
-      schemaVersion: frame.schemaVersion,
-      budget: { ...SEMANTIC_PARSER_BUDGET, ...(options.budget ?? {}) }
-    }, budget.maxLatencyMs);
-    frame = createTaskFrame(response?.taskFrame ?? response);
-    providerUsage = response?.usage ?? null;
+    try {
+      const response = await callProviderWithinBudget(options.provider, {
+        messages,
+        schemaVersion: frame.schemaVersion,
+        budget: { ...SEMANTIC_PARSER_BUDGET, ...(options.budget ?? {}) }
+      }, budget.maxLatencyMs);
+      frame = reconcileProviderFrame(
+        createTaskFrame(response?.taskFrame ?? response),
+        deterministicFrame,
+        text
+      );
+      providerUsage = response?.usage ?? null;
+    } catch (error) {
+      if (options.providerFailureFallback !== true) throw error;
+      providerFallback = {
+        used: true,
+        reason: error?.name === "TypeError" ? "invalid_response" : "provider_error"
+      };
+    }
   }
   if (options.entityLinking !== false && options.catalog) {
     frame = await linkTaskFrameEntities(frame, {
@@ -259,6 +473,7 @@ export async function parseSemanticTask(input, options = {}) {
       candidateRetriever: options.entityCandidateRetriever,
       candidateReranker: options.entityCandidateReranker
     });
+    frame = applyUnresolvedEntityPolicy(frame, input);
   }
   const contextResolution = resolveTaskFrameContext(frame, {
     input,
@@ -295,7 +510,8 @@ export async function parseSemanticTask(input, options = {}) {
       usage,
       budget,
       exampleIds: examples.map((example) => example.id),
-      provider: typeof options.provider === "function" ? "injected" : "deterministic"
+      provider: typeof options.provider === "function" ? "injected" : "deterministic",
+      providerFallback
     },
     stateBar: resolvedStateBar,
     contextResolution,

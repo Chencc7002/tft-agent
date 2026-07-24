@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "live-llm-t3-report-summary.v1",
+  "status": "passed",
+  "executedAt": "2026-07-24T06:52:16.612Z",
+  "evaluationVersion": "live-llm-t3-evaluation.v1",
+  "datasetVersion": "live-llm-t3-independent.v2",
+  "configuration": {
+    "provider": "chat",
+    "model": "deepseek-v4-flash",
+    "temperature": 0,
+    "streaming": false,
+    "concurrency": 4
+  },
+  "dataset": {
+    "cases": 120,
+    "repetitions": 3,
+    "requests": 360,
+    "fewShotExactOverlap": 0,
+    "categories": {
+      "slang": 20,
+      "typo": 20,
+      "context": 20,
+      "comparison": 20,
+      "unknownEntity": 20,
+      "unsupported": 20
+    }
+  },
+  "metrics": {
+    "requestSuccessRate": 1,
+    "providerFallbacks": 2,
+    "providerFallbackRate": 0.005555555555555556,
+    "passAt3": 0.9916666666666667,
+    "passPower3": 0.9583333333333334,
+    "domainAccuracy": 1,
+    "actionAccuracy": 1,
+    "statusAccuracy": 0.9861111111111112,
+    "entityMentionRecall": 1,
+    "entityResolutionTop1Accuracy": 1,
+    "toolSelectionAccuracy": 0.9805555555555555,
+    "clarificationAccuracy": 0.9916666666666667,
+    "tokenBudgetPassRate": 1,
+    "latencyBudgetPassRate": 1,
+    "tokens": {
+      "cachedInput": 434552,
+      "uncachedInput": 37648,
+      "output": 65669,
+      "total": 537869,
+      "perRequestP50": 1481,
+      "perRequestP95": 1576
+    },
+    "latencyMs": {
+      "average": 1645.183223887947,
+      "p50": 1616.597000002861,
+      "p95": 2034.2581000328064,
+      "wall": 148802.87720000744
+    }
+  },
+  "gates": {
+    "datasetSize": true,
+    "repetitions": true,
+    "requestSuccess": true,
+    "providerFallback": true,
+    "passAtK": true,
+    "passPowerK": true,
+    "domainAccuracy": true,
+    "actionAccuracy": true,
+    "statusAccuracy": true,
+    "entityResolution": true,
+    "toolSelection": true,
+    "clarification": true,
+    "tokenBudget": true,
+    "latencyBudget": true
+  },
+  "realCanaryStarted": false
+}

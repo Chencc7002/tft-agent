@@ -1,8 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { runSemanticShadow } from "../src/understanding/semantic-shadow.js";
 import { recommendForInput } from "../src/core/recommendation-service.js";
 import { createCatalog } from "../src/data/static-data.js";
+
+const COMP_PAGE_FIXTURE = JSON.parse(readFileSync(
+  new URL("./fixtures/comp-rankings/metatft-comps-page-minimal.json", import.meta.url),
+  "utf8"
+));
 
 test("semantic shadow records sanitized differences without changing legacy output", async () => {
   const events = [];
@@ -71,4 +77,20 @@ test("production recommendation path runs semantic shadow without changing the l
   assert.ok(routed.agentTrace);
   assert.equal(routed.agentRouting.route, "semantic");
   assert.equal(Object.keys(routed).includes("agentRouting"), false);
+});
+
+test("production path routes 九五 through semantic correction and structured comp statistics", async () => {
+  const result = await recommendForInput("给我推荐九五阵容", {
+    catalog: createCatalog(),
+    useSession: false,
+    compResponse: COMP_PAGE_FIXTURE,
+    semanticTakeoverKey: "phase65-fast9"
+  });
+  assert.equal(result.agentRouting.route, "semantic_correction");
+  assert.equal(result.agentRouting.executionPath, "semantic_correction");
+  assert.equal(result.agentRouting.semanticDifference.kind, "trusted_correction");
+  assert.deepEqual(result.agentRouting.plannedTools, ["comps_rankings"]);
+  assert.equal(result.query.preferenceRequested, true);
+  assert.equal(result.query.preferenceConditions.strategy, "fast9");
+  assert.equal(result.retrievalPlan.structuredQueries[0].operation, "comps_rankings");
 });
