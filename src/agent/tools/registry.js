@@ -34,6 +34,31 @@ function validateDefinition(definition) {
   if (!Number.isFinite(Number(definition.timeoutMs)) || Number(definition.timeoutMs) <= 0) {
     throw new ToolError("Tool definition requires a positive timeoutMs", { code: "invalid_tool_definition" });
   }
+  if (definition.capabilities !== undefined && !Array.isArray(definition.capabilities)) {
+    throw new ToolError("Tool definition capabilities must be an array", {
+      code: "invalid_tool_definition"
+    });
+  }
+  for (const capability of definition.capabilities ?? []) {
+    if (!capability || typeof capability !== "object" || !String(capability.action ?? "").trim()) {
+      throw new ToolError("Each tool capability requires an action", {
+        code: "invalid_tool_definition"
+      });
+    }
+    for (const field of [
+      "requiredEntityTypes",
+      "allowedEntityTypes",
+      "goals",
+      "outputs",
+      "requiredConstraints"
+    ]) {
+      if (capability[field] !== undefined && !Array.isArray(capability[field])) {
+        throw new ToolError(`Tool capability ${field} must be an array`, {
+          code: "invalid_tool_definition"
+        });
+      }
+    }
+  }
   return Object.freeze({
     ...definition,
     name: String(definition.name),
@@ -41,7 +66,16 @@ function validateDefinition(definition) {
     source: String(definition.source),
     readOnly: Boolean(definition.readOnly),
     idempotent: Boolean(definition.idempotent),
-    cacheable: Boolean(definition.cacheable)
+    cacheable: Boolean(definition.cacheable),
+    capabilities: Object.freeze((definition.capabilities ?? []).map((capability) => Object.freeze({
+      ...structuredClone(capability)
+    }))),
+    trustTier: String(definition.trustTier ?? "first_party"),
+    sideEffect: String(definition.sideEffect ?? (definition.readOnly ? "none" : "unspecified")),
+    requiresApproval: Boolean(definition.requiresApproval),
+    permissions: Object.freeze((definition.permissions ?? []).map(String)),
+    credentialScope: String(definition.credentialScope ?? "none"),
+    evidenceType: String(definition.evidenceType ?? "unspecified")
   });
 }
 

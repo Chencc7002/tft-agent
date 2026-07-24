@@ -50,6 +50,10 @@ import { runSemanticShadow } from "../understanding/semantic-shadow.js";
 import { RetrievalPlanner } from "../retrieval/retrieval-planner.js";
 import { StructuredRetriever } from "../retrieval/structured-retriever.js";
 import { SUPPORTED_CONCLUSION_INTENTS } from "../llm/conclusion-spec-registry.js";
+import {
+  createTakeoverDecision,
+  finalizeTakeoverTrace
+} from "../agent/takeover-controller.js";
 
 export const SESSION_LAST_QUERY_KEY = "last_query";
 const RETRIEVAL_PLANNER = new RetrievalPlanner();
@@ -154,6 +158,136 @@ async function executePlannedStructuredQuery(plan, operation, handler, context =
   }
   const retriever = new StructuredRetriever({ handlers: { [operation]: handler } });
   return (await retriever.executeQuery(query, context)).value;
+}
+
+function semanticTakeoverDecision(shadowResult, retrievalPlan, options = {}) {
+  if (options.semanticTakeover === false || shadowResult?.status !== "completed") return null;
+  const decision = createTakeoverDecision({
+    taskFrame: shadowResult.semanticResult?.taskFrame,
+    clarificationPolicy: shadowResult.semanticResult?.clarificationPolicy,
+    capabilityMatch: shadowResult.capabilityMatch,
+    taskPlanning: shadowResult.taskPlanning,
+    executionPlanning: shadowResult.executionPlanning,
+    shadowDifference: shadowResult.difference,
+    legacyTools: (retrievalPlan?.structuredQueries ?? []).map((query) => query.operation),
+    requestKey: options.semanticTakeoverKey
+      ?? options.sessionKey
+      ?? options.conversationId
+      ?? "default",
+    policy: options.semanticTakeoverPolicy
+  });
+  try {
+    options.agentRun?.emit?.({
+      type: "semantic_takeover_decided",
+      stage: "planning",
+      data: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        mode: decision.mode,
+        action: decision.action,
+        reason: decision.reason,
+        executionPath: decision.executionPath,
+        semanticDifference: decision.semanticDifference,
+        plannedTools: decision.plannedTools,
+        legacyTools: decision.legacyTools
+      }
+    });
+  } catch {
+    // Routing observability cannot alter deterministic execution.
+  }
+  return decision;
+}
+
+function isMappedConceptResidue(hint, mapping) {
+  const fragment = normalizeAlias(hint?.inputFragment);
+  const mention = normalizeAlias(mapping?.mention);
+  if (!fragment || !mention) return false;
+  const genericSuffixes = ["阵容", "体系"];
+  const residue = genericSuffixes.reduce(
+    (value, suffix) => value.endsWith(suffix) ? value.slice(0, -suffix.length) : value,
+    fragment
+  );
+  return Boolean(residue && (mention.endsWith(residue) || residue.endsWith(mention)));
+}
+
+function applyControlledSemanticCorrection(parsed, shadowResult, options = {}) {
+  if (
+    options.semanticTakeover === false
+    || shadowResult?.status !== "completed"
+    || shadowResult.executionPlanning?.plan?.route !== "semantic_correction"
+  ) return parsed;
+  const executionTools = (shadowResult.executionPlanning.plan.steps ?? []).map((step) => step.tool);
+  const decision = createTakeoverDecision({
+    taskFrame: shadowResult.semanticResult?.taskFrame,
+    clarificationPolicy: shadowResult.semanticResult?.clarificationPolicy,
+    capabilityMatch: shadowResult.capabilityMatch,
+    taskPlanning: shadowResult.taskPlanning,
+    executionPlanning: shadowResult.executionPlanning,
+    shadowDifference: shadowResult.difference,
+    legacyTools: executionTools,
+    legacyUnsupported: true,
+    requestKey: options.semanticTakeoverKey
+      ?? options.sessionKey
+      ?? options.conversationId
+      ?? "default",
+    policy: options.semanticTakeoverPolicy
+  });
+  if (decision.route !== "semantic_correction") return parsed;
+  const mapping = shadowResult.executionPlanning.plan.conceptMapping;
+  if (
+    mapping?.conceptId !== "concept.strategy.fast9_nine_five"
+    || executionTools.length !== 1
+    || executionTools[0] !== "comps_rankings"
+  ) return parsed;
+  const currentHints = asArray(parsed?.parser?.unresolvedEntityHints);
+  const remainingHints = currentHints.filter((hint) => !isMappedConceptResidue(hint, mapping));
+  const semanticLimit = shadowResult.semanticResult?.taskFrame?.constraints?.limit;
+  return {
+    ...parsed,
+    intent: "comp_rankings",
+    preferenceRequested: true,
+    preferenceConditions: {
+      ...(parsed.preferenceConditions ?? {}),
+      strategy: "fast9",
+      ...(Number.isInteger(semanticLimit) ? { count: semanticLimit } : {})
+    },
+    parser: {
+      ...(parsed.parser ?? {}),
+      unresolvedEntityHints: remainingHints,
+      semanticCorrection: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        executionPath: decision.executionPath,
+        conceptId: mapping.conceptId,
+        queryCapability: mapping.queryCapability
+      }
+    }
+  };
+}
+
+function attachSemanticTakeover(result, decision, outcome = {}) {
+  if (!decision) return result;
+  Object.defineProperties(result, {
+    agentRouting: {
+      enumerable: false,
+      value: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        mode: decision.mode,
+        action: decision.action,
+        reason: decision.reason,
+        executionPath: decision.executionPath,
+        semanticDifference: decision.semanticDifference,
+        plannedTools: decision.plannedTools,
+        legacyTools: decision.legacyTools
+      }
+    },
+    agentTrace: {
+      enumerable: false,
+      value: finalizeTakeoverTrace(decision, outcome)
+    }
+  });
+  return result;
 }
 
 function itemLabel(apiName, catalog) {
@@ -1494,8 +1628,9 @@ export async function recommendForInput(input, options = {}) {
   let deterministicParsed = parseQueryDeterministically(input, options, catalog);
   deterministicParsed = await applySemanticIntentHint(input, deterministicParsed, options);
   deterministicParsed = await applySemanticEntityHints(input, deterministicParsed, options, catalog);
+  let semanticShadowResult = null;
   if (semanticTaskPromise) {
-    await runSemanticShadow(input, deterministicParsed, {
+    semanticShadowResult = await runSemanticShadow(input, deterministicParsed, {
       parser: () => semanticTaskPromise,
       agentRun: options.agentRun
     });
@@ -1527,6 +1662,7 @@ export async function recommendForInput(input, options = {}) {
     }
     : inheritCompRankingFromSession(parsedInput, initialSessionEntry?.value, options);
   parsedInput = compSessionMerge.parsed;
+  parsedInput = applyControlledSemanticCorrection(parsedInput, semanticShadowResult, options);
 
   if (isCompIntent(parsedInput.intent)) {
     const query = buildCompRankingQuery(parsedInput, {
@@ -1560,6 +1696,11 @@ export async function recommendForInput(input, options = {}) {
     if (!retrievalAudit.retrievalPlan || retrievalAudit.retrievalPlan.needsClarification) {
       throw new Error("A valid RetrievalPlan is required before structured retrieval");
     }
+    const semanticRouting = semanticTakeoverDecision(
+      semanticShadowResult,
+      retrievalAudit.retrievalPlan,
+      options
+    );
     const queryCacheKey = makeQueryCacheKey(query);
     let response = options.compResponse ?? options.response;
     let queryCache = { key: queryCacheKey, hit: false };
@@ -1741,6 +1882,15 @@ export async function recommendForInput(input, options = {}) {
       }
     };
     decorated.text = decorated.text ?? "";
+    attachSemanticTakeover(decorated, semanticRouting, {
+      toolStatus: queryCache.stale ? "degraded" : queryCache.hit ? "cache_hit" : "completed",
+      conclusionStatus: "completed",
+      failureLayer: queryCache.stale ? "tool" : null,
+      latencyMs: semanticShadowResult?.semanticResult?.telemetry?.durationMs ?? 0,
+      cachedInputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.cachedInputTokens ?? 0,
+      inputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.uncachedInputTokens ?? 0,
+      outputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.outputTokens ?? 0
+    });
     attachRetrievalAudit(decorated, input, catalog, retrievalAudit);
     return decorated;
   }
@@ -1926,6 +2076,11 @@ export async function recommendForInput(input, options = {}) {
   if (!finalRetrievalAudit.retrievalPlan || finalRetrievalAudit.retrievalPlan.needsClarification) {
     throw new Error("A valid RetrievalPlan is required before structured retrieval");
   }
+  const semanticRouting = semanticTakeoverDecision(
+    semanticShadowResult,
+    finalRetrievalAudit.retrievalPlan,
+    options
+  );
   const queryCacheKey = makeQueryCacheKey(validatedQuery);
   let queryCache = {
     key: queryCacheKey,
@@ -2060,5 +2215,14 @@ export async function recommendForInput(input, options = {}) {
     result.cache.session.writtenAt = sessionWrite.updatedAt;
   }
 
+  attachSemanticTakeover(result, semanticRouting, {
+    toolStatus: queryCache.stale ? "degraded" : queryCache.hit ? "cache_hit" : "completed",
+    conclusionStatus: "completed",
+    failureLayer: queryCache.stale ? "tool" : null,
+    latencyMs: semanticShadowResult?.semanticResult?.telemetry?.durationMs ?? 0,
+    cachedInputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.cachedInputTokens ?? 0,
+    inputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.uncachedInputTokens ?? 0,
+    outputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.outputTokens ?? 0
+  });
   return attachRetrievalAudit(result, input, catalog, finalRetrievalAudit);
 }

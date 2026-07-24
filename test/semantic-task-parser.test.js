@@ -62,3 +62,19 @@ test("semantic parser enforces output token and latency budgets", async () => {
     (error) => error.code === "semantic_parser_timeout"
   );
 });
+
+test("semantic parser records a controlled deterministic fallback after an invalid provider response", async () => {
+  const parsed = await parseSemanticTask("霞的羊刀和巨九二选一", {
+    providerFailureFallback: true,
+    provider: async () => {
+      throw new TypeError("invalid TaskFrame");
+    }
+  });
+
+  assert.equal(parsed.taskFrame.action, "compare");
+  assert.equal(parsed.taskFrame.understandingStatus, "understood_and_supported");
+  assert.deepEqual(parsed.telemetry.providerFallback, {
+    used: true,
+    reason: "invalid_response"
+  });
+});

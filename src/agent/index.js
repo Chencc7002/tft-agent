@@ -29,3 +29,17 @@ export { ToolError } from "./tools/tool-errors.js";
 export { ToolExecutor } from "./tools/executor.js";
 export { createStructuredToolDefinitions } from "./tools/definitions.js";
 export { STRUCTURED_OPERATION_REGISTRY } from "../retrieval/structured-retriever.js";
+export {
+  TASK_PLAN_SCHEMA_VERSION,
+  planTask,
+  validateTaskPlan
+} from "./task-planner.js";
+export {
+  AGENT_TRACE_VERSION,
+  DEFAULT_PHASE6_ROLLOUT_POLICY,
+  TAKEOVER_ACTION_ORDER,
+  TAKEOVER_DECISION_VERSION,
+  createTakeoverDecision,
+  finalizeTakeoverTrace,
+  validateTakeoverPolicy
+} from "./takeover-controller.js";

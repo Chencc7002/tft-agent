@@ -16,7 +16,7 @@
         <span class="topbar-starfield" id="topbar-starfield" aria-hidden="true"></span>
         <div class="brand" aria-label="tftclarity">
           <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 32 32" role="img"><path d="M16 2.7 19.4 12 29 16l-9.6 4L16 29.3 12.6 20 3 16l9.6-4L16 2.7Z"/><path d="m16 8 1.8 6.2L24 16l-6.2 1.8L16 24l-1.8-6.2L8 16l6.2-1.8L16 8Z"/></svg>
+            <img src="/favicon.png" alt="">
           </span>
           <span class="brand-copy">
             <strong>tftclarity</strong>
@@ -39,26 +39,8 @@
               <span class="wallpaper-state" data-wallpaper-state>开启</span>
             </button>
             <select id="wallpaper-select" class="wallpaper-select" aria-label="赛季壁纸"></select>
-            <button type="button" id="wallpaper-mobile-button" class="wallpaper-mobile-button" aria-expanded="false" aria-controls="wallpaper-mobile-menu" data-i18n-title="wallpaperChoice" data-i18n-aria="wallpaperChoice" title="选择赛季壁纸" aria-label="选择赛季壁纸">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4z"/><path d="m6.5 16 3.8-4 2.7 2.7 2.2-2.2 2.3 3.5"/><circle cx="16.5" cy="9" r="1.4"/></svg>
-              <span class="wallpaper-mobile-dot" aria-hidden="true"></span>
-            </button>
-            <section id="wallpaper-mobile-menu" class="wallpaper-mobile-menu" role="dialog" data-i18n-aria="wallpaperChoice" aria-label="选择赛季壁纸" hidden>
-              <header class="wallpaper-mobile-head">
-                <div>
-                  <strong data-i18n="wallpaperMenuTitle">选择壁纸</strong>
-                  <small data-i18n="wallpaperMenuHint">随时切换当前赛季背景</small>
-                </div>
-                <button type="button" id="wallpaper-mobile-close" class="wallpaper-mobile-close" data-i18n-title="closeWallpaperMenu" data-i18n-aria="closeWallpaperMenu" title="关闭壁纸选择" aria-label="关闭壁纸选择">×</button>
-              </header>
-              <button type="button" id="wallpaper-mobile-toggle" class="wallpaper-mobile-toggle" role="switch" aria-checked="true">
-                <span data-i18n="wallpaperEnabled">显示壁纸</span>
-                <span class="wallpaper-mobile-switch" aria-hidden="true"><i></i></span>
-              </button>
-              <div id="wallpaper-mobile-options" class="wallpaper-mobile-options"></div>
-            </section>
           </div>
-          <div class="language-toggle segmented" role="group" data-i18n-aria="languageLabel" aria-label="语言">
+          <div class="language-toggle top-language-toggle segmented" role="group" data-i18n-aria="languageLabel" aria-label="语言">
             <button type="button" data-locale="zh-CN" class="active" aria-pressed="true">中文</button>
             <button type="button" data-locale="en-US" aria-pressed="false">EN</button>
           </div>
@@ -155,6 +137,38 @@
             <button type="button" id="settings-close" class="icon-button dark" data-i18n-title="closeSettings" data-i18n-aria="closeSettings" title="关闭设置" aria-label="关闭设置">×</button>
           </div>
           <div class="settings-scroll">
+            <section class="settings-section mobile-preferences">
+              <h2 data-i18n="settings">显示偏好</h2>
+              <div class="mobile-preference-row">
+                <span data-i18n="languageLabel">语言</span>
+                <div class="language-toggle segmented" role="group" data-i18n-aria="languageLabel" aria-label="语言">
+                  <button type="button" data-locale="zh-CN" class="active" aria-pressed="true">中文</button>
+                  <button type="button" data-locale="en-US" aria-pressed="false">EN</button>
+                </div>
+              </div>
+              <button type="button" class="mobile-preference-button" data-open-wallpaper>
+                <span><strong data-i18n="wallpaper">壁纸</strong><small data-i18n="wallpaperMenuHint">随时切换当前赛季背景</small></span>
+                <span aria-hidden="true">›</span>
+              </button>
+              <button type="button" id="wallpaper-mobile-button" class="wallpaper-mobile-button" aria-expanded="false" aria-controls="wallpaper-mobile-menu" data-i18n-title="wallpaperChoice" data-i18n-aria="wallpaperChoice" title="选择赛季壁纸" aria-label="选择赛季壁纸">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4z"/><path d="m6.5 16 3.8-4 2.7 2.7 2.2-2.2 2.3 3.5"/><circle cx="16.5" cy="9" r="1.4"/></svg>
+                <span class="wallpaper-mobile-dot" aria-hidden="true"></span>
+              </button>
+              <section id="wallpaper-mobile-menu" class="wallpaper-mobile-menu" role="dialog" data-i18n-aria="wallpaperChoice" aria-label="选择赛季壁纸" hidden>
+                <header class="wallpaper-mobile-head">
+                  <div>
+                    <strong data-i18n="wallpaperMenuTitle">选择壁纸</strong>
+                    <small data-i18n="wallpaperMenuHint">随时切换当前赛季背景</small>
+                  </div>
+                  <button type="button" id="wallpaper-mobile-close" class="wallpaper-mobile-close" data-i18n-title="closeWallpaperMenu" data-i18n-aria="closeWallpaperMenu" title="关闭壁纸选择" aria-label="关闭壁纸选择">×</button>
+                </header>
+                <button type="button" id="wallpaper-mobile-toggle" class="wallpaper-mobile-toggle" role="switch" aria-checked="true">
+                  <span data-i18n="wallpaperEnabled">显示壁纸</span>
+                  <span class="wallpaper-mobile-switch" aria-hidden="true"><i></i></span>
+                </button>
+                <div id="wallpaper-mobile-options" class="wallpaper-mobile-options"></div>
+              </section>
+            </section>
             <details class="advanced-query-settings" open>
               <summary data-i18n="advancedDefaults">高级查询默认值</summary>
               <section class="controls" data-i18n-aria="queryConditions" aria-label="查询条件">

@@ -14,6 +14,153 @@ const DESCRIPTIONS = Object.freeze({
   semantic_search: "Use for static semantic recall of aliases and descriptions. Not for realtime statistics or strength ranking. Input contains a bounded query and filters. Returns semantic candidates."
 });
 
+const CAPABILITIES = Object.freeze({
+  unit_builds: Object.freeze([
+    Object.freeze({
+      action: "recommend",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["recommend_best_option"],
+      outputs: ["recommendation", "ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "compare",
+      requiredEntityTypes: ["champion", "item"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["choose_best"],
+      outputs: ["recommendation", "comparison", "evidence"]
+    }),
+    Object.freeze({
+      action: "rank",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      outputs: ["ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "analyze",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["analyze_evidence"],
+      outputs: ["analysis", "ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "search",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion", "item", "trait", "composition", "patch"],
+      goals: ["find_relevant_data"],
+      outputs: ["results", "ranking", "evidence"]
+    })
+  ]),
+  unit_comp_candidates: Object.freeze([
+    Object.freeze({
+      action: "search",
+      requiredEntityTypes: ["champion", "composition"],
+      allowedEntityTypes: ["champion", "composition", "trait"],
+      outputs: ["results", "composition_candidates", "evidence"]
+    }),
+    Object.freeze({
+      action: "recommend",
+      requiredEntityTypes: ["champion", "composition"],
+      allowedEntityTypes: ["champion", "composition", "trait", "item"],
+      goals: ["recommend_best_option"],
+      outputs: ["composition_candidates", "evidence"]
+    })
+  ]),
+  comps_rankings: Object.freeze([
+    Object.freeze({
+      action: "rank",
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
+      allowNoEntities: true,
+      goals: ["rank_options"],
+      outputs: ["ranking", "evidence"]
+    }),
+    Object.freeze({
+      action: "recommend",
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
+      allowNoEntities: true,
+      goals: ["recommend_best_option"],
+      outputs: ["recommendation", "ranking", "evidence"]
+    })
+  ]),
+  comps_trends: Object.freeze([
+    Object.freeze({
+      action: "analyze",
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
+      allowNoEntities: true,
+      goals: ["analyze_evidence"],
+      requiredConstraints: ["trend"],
+      outputs: ["analysis", "ranking", "evidence"]
+    })
+  ]),
+  comps_analysis: Object.freeze([
+    Object.freeze({
+      action: "analyze",
+      allowedEntityTypes: ["composition", "trait", "champion", "game_concept", "patch"],
+      allowNoEntities: true,
+      goals: ["analyze_evidence"],
+      outputs: ["analysis", "evidence"]
+    })
+  ]),
+  unit_details: Object.freeze([
+    Object.freeze({
+      action: "explain",
+      requiredEntityTypes: ["champion"],
+      allowedEntityTypes: ["champion"],
+      outputs: ["explanation", "evidence"]
+    })
+  ]),
+  item_details: Object.freeze([
+    Object.freeze({
+      action: "explain",
+      requiredEntityTypes: ["item"],
+      allowedEntityTypes: ["item"],
+      outputs: ["explanation", "evidence"]
+    })
+  ]),
+  trait_details: Object.freeze([
+    Object.freeze({
+      action: "explain",
+      requiredEntityTypes: ["trait"],
+      allowedEntityTypes: ["trait"],
+      outputs: ["explanation", "evidence"]
+    })
+  ]),
+  semantic_search: Object.freeze([
+    Object.freeze({
+      action: "search",
+      allowedEntityTypes: ["game_concept", "composition", "patch", "champion", "item", "trait"],
+      allowNoEntities: true,
+      outputs: ["results", "evidence"]
+    }),
+    Object.freeze({
+      action: "recommend",
+      requiredEntityTypes: ["game_concept"],
+      allowedEntityTypes: ["game_concept", "composition"],
+      goals: ["recommend_best_option"],
+      outputs: ["recommendation", "composition_candidates", "evidence"]
+    }),
+    Object.freeze({
+      action: "explain",
+      requiredEntityTypes: ["patch"],
+      allowedEntityTypes: ["patch"],
+      goals: ["explain_concept_or_entity"],
+      outputs: ["explanation", "evidence"]
+    })
+  ])
+});
+
+const EVIDENCE_TYPES = Object.freeze({
+  unit_builds: "unit_build_statistics",
+  unit_comp_candidates: "composition_candidates",
+  comps_rankings: "composition_rankings",
+  comps_trends: "composition_trends",
+  comps_analysis: "composition_analysis",
+  unit_details: "official_unit",
+  item_details: "official_item",
+  trait_details: "official_trait",
+  semantic_search: "semantic_candidates"
+});
+
 const PARAMETER_SCHEMAS = Object.freeze({
   unit: { type: "string" },
   mention: { type: "string" },
@@ -55,6 +202,7 @@ export function createStructuredToolDefinitions(options = {}) {
     name,
     version: "1",
     description: DESCRIPTIONS[name] ?? `Use only for allowlisted ${name} retrieval. Not for arbitrary operations. Returns existing deterministic data.`,
+    capabilities: CAPABILITIES[name] ?? [],
     source: registration.source,
     inputSchema: {
       type: "object",
@@ -74,6 +222,9 @@ export function createStructuredToolDefinitions(options = {}) {
     trustTier: "first_party",
     sideEffect: "none",
     requiresApproval: false,
+    permissions: [`${registration.source}:read`],
+    credentialScope: "none",
+    evidenceType: EVIDENCE_TYPES[name] ?? "structured_evidence",
     execute: async (input, context = {}) => {
       if (typeof context.handler !== "function") {
         throw new ToolError(`Tool handler is unavailable: ${name}`, {

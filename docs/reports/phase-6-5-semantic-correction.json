@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "agent_upgrade_phase_report.v1",
+  "phase": 6.5,
+  "status": "passed",
+  "baselineCommit": "ea7617c",
+  "dataset": {
+    "version": "semantic-gap-phase65.v1",
+    "cases": 120,
+    "repetitions": 3,
+    "runs": 360
+  },
+  "evaluation": {
+    "command": "npm run eval:phase65",
+    "classificationAccuracy": 1,
+    "routeAccuracy": 1,
+    "arbitraryToolCalls": 0,
+    "passAt3": 1,
+    "passPower3": 1
+  },
+  "slices": {
+    "trustedCorrection": 1,
+    "equivalent": 1,
+    "lowConfidence": 1,
+    "entityConflict": 1,
+    "newCapability": 1
+  },
+  "tests": {
+    "regression": {
+      "command": "node --test",
+      "total": 620,
+      "passed": 600,
+      "failed": 0,
+      "skipped": 20
+    },
+    "phase4": { "runs": 120, "passed": 120 },
+    "phase5": { "runs": 190, "passed": 190 },
+    "phase6": { "runs": 600, "passed": 600 },
+    "phase65": { "runs": 360, "passed": 360 }
+  },
+  "constraints": {
+    "legacyRetrievalPlanRetained": true,
+    "firstPartyReadOnlyToolsOnly": true,
+    "arbitraryToolExecution": false,
+    "videoToolsStarted": false,
+    "realCanaryStarted": false
+  }
+}
+

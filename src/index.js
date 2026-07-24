@@ -393,6 +393,31 @@ export {
 } from "./retrieval/structured-retriever.js";
 export { runLlmRetrievalPipeline } from "./retrieval/llm-pipeline.js";
 export {
+  EVALUATION_CANDIDATE_SET_SCHEMA_VERSION,
+  FAILURE_CANDIDATE_PRIVACY_POLICY,
+  FAILURE_CANDIDATE_SCHEMA_VERSION,
+  FAILURE_CANDIDATE_STATUSES,
+  FAILURE_CATEGORIES,
+  FAILURE_LOOP_SCHEMA_VERSION,
+  FailureCandidateStore,
+  classifyFailure,
+  createFailureCandidate,
+  exportEvaluationCandidates,
+  sanitizeFailureRecord
+} from "./evaluation/failure-loop.js";
+export {
+  CONTEXT_RESOLUTION_VERSION,
+  resolveTaskFrameContext
+} from "./understanding/context-resolver.js";
+export {
+  CLARIFICATION_POLICY_VERSION,
+  applyClarificationPolicy
+} from "./understanding/ambiguity-policy.js";
+export {
+  CAPABILITY_MATCH_VERSION,
+  matchTaskCapabilities
+} from "./understanding/capability-matcher.js";
+export {
   createRecommendationFromRows,
   recommendForInput,
   SESSION_LAST_QUERY_KEY
@@ -418,7 +443,17 @@ export {
   ToolExecutor,
   ToolRegistry,
   createStructuredToolDefinitions,
-  normalizeRunBudget
+  normalizeRunBudget,
+  TASK_PLAN_SCHEMA_VERSION,
+  AGENT_TRACE_VERSION,
+  DEFAULT_PHASE6_ROLLOUT_POLICY,
+  TAKEOVER_ACTION_ORDER,
+  TAKEOVER_DECISION_VERSION,
+  createTakeoverDecision,
+  finalizeTakeoverTrace,
+  validateTakeoverPolicy,
+  planTask,
+  validateTaskPlan
 } from "./agent/index.js";
 
 export function planQuery(input, options = {}) {

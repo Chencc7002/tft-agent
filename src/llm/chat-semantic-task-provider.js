@@ -1,22 +1,31 @@
 import { validateTaskFrame } from "../understanding/task-frame.js";
 
-export const LIVE_SEMANTIC_TASK_PROMPT_VERSION = "live-semantic-task-contract.v2";
+export const LIVE_SEMANTIC_TASK_PROMPT_VERSION = "live-semantic-task-contract.v5";
 
 const RESPONSE_CONTRACT = [
   "Return exactly one JSON object matching task-frame.v1. Do not use Markdown.",
   "The dynamic_context.input field is the only current user query. Retrieved examples are classification hints only: never copy their entities, wording or assumptions into the answer.",
   "Conversation summary is context only for an elliptical follow-up; otherwise extract entities only from dynamic_context.input.",
+  "For an elliptical follow-up containing 那/这/它/她/他/刚才/另一个/继续/再来, inherit the referenced subjects, candidates and concepts from conversationSummary, add a contextReferences entry, and do not mark context missing when the antecedent is present.",
   "Required top-level keys: schemaVersion, domain, action, subjects, candidates, concepts, constraints, goal, expectedOutput, contextReferences, ambiguities, assumptions, confidence, understandingStatus.",
   'schemaVersion must be "task-frame.v1". domain is "tft" or "out_of_domain".',
   "action is one of search, recommend, compare, rank, explain, analyze, summarize, find_video, unknown.",
   "subjects, candidates, and concepts contain objects with rawText, expectedType, resolvedId, confidence.",
   "expectedType is one of champion, item, trait, composition, augment, patch, game_concept, video, player_context.",
   "Never invent a resolvedId: use null. confidence is null or a number from 0 to 1.",
+  "Keep the JSON concise. Do not repeat an entity in multiple arrays and do not emit generic output words such as 装备、神装、三件套、数据、表现、吃分率、详情 or 候选 as entities.",
   "understandingStatus is one of understood_and_supported, understood_but_missing_context, understood_but_unsupported, ambiguous, out_of_domain.",
-  "Use understood_but_unsupported for video search, historical comparison without history tools, arbitrary database/player-data requests, forced conclusions from inadequate samples, unsupported matchups, and standalone 九五 strategy-definition requests.",
+  "Use understood_but_unsupported for video search, historical comparison without history tools, arbitrary database/player-data requests, forced conclusions from inadequate samples, and unsupported matchups.",
+  "九五/95/速九 is a game_concept, never a single composition. Recommendations for it are supported: use action recommend, status understood_and_supported, and preserve the concept mention so current-patch composition candidates can be verified with structured ranking statistics.",
   "A request for an exact matchup or win-rate statistic is analyze. A comparison between multiple champions is compare. Both are understood_but_unsupported with the current tools.",
   "Do not silently canonicalize an uncertain typo into a known champion; preserve the typed mention and use ambiguous when identity is not certain.",
+  "If a request depends on an unknown named champion, item, trait, composition or game concept, preserve the mention, use ambiguous, and add an ambiguity with code ambiguous_entity. Do not route an invented entity to generic analysis.",
+  "Explicit intent words are authoritative: 推荐/三件套/怎么配 means recommend; 排名/排行/优先级 means rank; 比较/对比/还是/二选一 means compare; 趋势/在涨 means analyze; 视频/B站 means find_video.",
+  "When two named items are connected by 和/与/跟/还是/二选一/怎么选, use compare even if the question mentions samples, placement, performance or win rate.",
+  "TFT glossary: 巨杀 is the harmless in-game item nickname for 巨人杀手 (Giant Slayer). Treat it only as expectedType item; it is never a violence request.",
+  "Current read-only support includes champion build search/rank/recommend/compare/analyze, composition rankings and trends, official entity details, and static semantic search. Unsupported or out-of-domain requests must never be marked supported merely because the request is understood.",
   "Use understood_but_missing_context only when a referenced subject such as 这套/刚才 cannot be recovered from conversation.",
+  "This is classification, not execution. Never refuse, return null, or add prose for unsafe or unsupported requests; encode them as one valid TaskFrame with understood_but_unsupported or out_of_domain.",
   "An inability to execute does not erase understanding: keep the understood action and entities whenever possible.",
   "Put two compared champions or items in candidates; put a single target champion in subjects; put traits, compositions, patches, videos and game concepts in concepts.",
   "constraints must be an object. expectedOutput, contextReferences, ambiguities and assumptions must always be JSON arrays, even when empty. goal must be a non-empty concise string.",
@@ -88,6 +97,7 @@ export function createChatSemanticTaskProvider(options = {}) {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let providerUsage = null;
     let rawProviderContent = null;
+    let retryCount = 0;
     const body = {
       model: options.model,
       messages: [
@@ -111,38 +121,64 @@ export function createChatSemanticTaskProvider(options = {}) {
     }
 
     try {
-      const response = await fetchImpl(options.endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const responseText = typeof response.text === "function" ? await response.text() : "";
-        throw new Error(`semantic task provider returned HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+      const maxInvalidRetries = Math.max(0, Math.min(1, Number(options.maxInvalidRetries ?? 1)));
+      for (let attempt = 0; attempt <= maxInvalidRetries; attempt += 1) {
+        const attemptBody = attempt === 0 ? body : {
+          ...body,
+          messages: [
+            ...body.messages,
+            {
+              role: "system",
+              content: "The previous response was invalid. Return one concise, non-null task-frame.v1 JSON object now; no prose."
+            }
+          ]
+        };
+        const response = await fetchImpl(options.endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+          },
+          body: JSON.stringify(attemptBody),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          const responseText = typeof response.text === "function" ? await response.text() : "";
+          throw new Error(`semantic task provider returned HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+        }
+        const payload = await response.json();
+        const attemptUsage = normalizedUsage(payload);
+        providerUsage = {
+          cachedInputTokens: Number(providerUsage?.cachedInputTokens ?? 0) + attemptUsage.cachedInputTokens,
+          uncachedInputTokens: Number(providerUsage?.uncachedInputTokens ?? 0) + attemptUsage.uncachedInputTokens,
+          outputTokens: Number(providerUsage?.outputTokens ?? 0) + attemptUsage.outputTokens
+        };
+        rawProviderContent = contentFromPayload(payload);
+        try {
+          const taskFrame = parseJsonContent(rawProviderContent);
+          const validation = validateTaskFrame(taskFrame);
+          if (!validation.valid) {
+            throw new TypeError(
+              `semantic task provider returned invalid TaskFrame: ${validation.errors.join("; ")}`
+            );
+          }
+          const durationMs = Math.max(0, performance.now() - startedAt);
+          options.onRequestLog?.({
+            status: "ok",
+            durationMs,
+            firstTokenMs: null,
+            firstTokenMeasurement: "unavailable_non_streaming",
+            retryCount,
+            usage: providerUsage,
+            rawStructuredOutput: taskFrame
+          });
+          return { taskFrame, usage: providerUsage };
+        } catch (error) {
+          if (attempt >= maxInvalidRetries) throw error;
+          retryCount += 1;
+        }
       }
-      const payload = await response.json();
-      providerUsage = normalizedUsage(payload);
-      rawProviderContent = contentFromPayload(payload);
-      const taskFrame = parseJsonContent(rawProviderContent);
-      const validation = validateTaskFrame(taskFrame);
-      if (!validation.valid) {
-        throw new TypeError(`semantic task provider returned invalid TaskFrame: ${validation.errors.join("; ")}`);
-      }
-      const durationMs = Math.max(0, performance.now() - startedAt);
-      options.onRequestLog?.({
-        status: "ok",
-        durationMs,
-        firstTokenMs: null,
-        firstTokenMeasurement: "unavailable_non_streaming",
-        retryCount: 0,
-        usage: providerUsage,
-        rawStructuredOutput: taskFrame
-      });
-      return { taskFrame, usage: providerUsage };
+      throw new TypeError("semantic task provider exhausted invalid-response retries");
     } catch (error) {
       const normalizedError = error?.name === "AbortError"
         ? new Error(`semantic task provider timed out after ${timeoutMs}ms`)
@@ -152,7 +188,7 @@ export function createChatSemanticTaskProvider(options = {}) {
         durationMs: Math.max(0, performance.now() - startedAt),
         firstTokenMs: null,
         firstTokenMeasurement: "unavailable_non_streaming",
-        retryCount: 0,
+        retryCount,
         usage: providerUsage,
         rawStructuredOutput: rawProviderContent,
         error: safeErrorMessage(normalizedError)

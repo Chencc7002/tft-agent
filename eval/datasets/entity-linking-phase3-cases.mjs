@@ -14,6 +14,12 @@ const EXTRA_UNITS = Object.freeze([
     zhName: "卡莎",
     aliases: ["卡莎", "虚空之女", "kaisa"],
     current: true
+  },
+  {
+    apiName: "TFT17_Rakan",
+    zhName: "洛",
+    aliases: ["洛", "幻翎", "rakan"],
+    current: true
   }
 ]);
 

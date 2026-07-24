@@ -6,7 +6,19 @@ export const GAME_CONCEPTS = Object.freeze([
   {
     id: "concept.strategy.fast9_nine_five",
     canonicalName: "九五",
-    aliases: ["九五", "95", "九五阵容", "95阵容", "高费九五", "速九"],
+    aliases: [
+      "九五",
+      "95",
+      "九五阵容",
+      "95阵容",
+      "95体系",
+      "高费九五",
+      "速九",
+      "速九九五",
+      "九人口高费体系",
+      "九人口高费阵容",
+      "高费体系"
+    ],
     description: "以快速升九并使用高费棋子为目标的阵容构筑方式。"
   },
   {

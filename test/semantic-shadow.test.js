@@ -1,8 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { runSemanticShadow } from "../src/understanding/semantic-shadow.js";
 import { recommendForInput } from "../src/core/recommendation-service.js";
 import { createCatalog } from "../src/data/static-data.js";
+
+const COMP_PAGE_FIXTURE = JSON.parse(readFileSync(
+  new URL("./fixtures/comp-rankings/metatft-comps-page-minimal.json", import.meta.url),
+  "utf8"
+));
 
 test("semantic shadow records sanitized differences without changing legacy output", async () => {
   const events = [];
@@ -24,6 +30,9 @@ test("semantic shadow records sanitized differences without changing legacy outp
   assert.equal(JSON.stringify(events[0]).includes("霞的炼刀"), false);
   assert.equal(events[0].data.usage.cachedInputTokens > 0, true);
   assert.equal(events[0].data.difference.semantic.action, "compare");
+  assert.equal(result.capabilityMatch.status, "understood_and_supported");
+  assert.equal(result.taskPlanning.validation.valid, true);
+  assert.equal(events[0].data.taskPlan.planVersion, "task-plan.v1");
 });
 
 test("semantic shadow failure is isolated from the legacy chain", async () => {
@@ -58,4 +67,30 @@ test("production recommendation path runs semantic shadow without changing the l
 
   assert.deepEqual(shadowed, baseline);
   assert.equal(events.some((event) => event.type === "semantic_shadow_completed"), true);
+
+  const routed = await recommendForInput("霞怎么出装", {
+    catalog,
+    useSession: false,
+    response: []
+  });
+  assert.ok(routed.agentRouting);
+  assert.ok(routed.agentTrace);
+  assert.equal(routed.agentRouting.route, "semantic");
+  assert.equal(Object.keys(routed).includes("agentRouting"), false);
+});
+
+test("production path routes 九五 through semantic correction and structured comp statistics", async () => {
+  const result = await recommendForInput("给我推荐九五阵容", {
+    catalog: createCatalog(),
+    useSession: false,
+    compResponse: COMP_PAGE_FIXTURE,
+    semanticTakeoverKey: "phase65-fast9"
+  });
+  assert.equal(result.agentRouting.route, "semantic_correction");
+  assert.equal(result.agentRouting.executionPath, "semantic_correction");
+  assert.equal(result.agentRouting.semanticDifference.kind, "trusted_correction");
+  assert.deepEqual(result.agentRouting.plannedTools, ["comps_rankings"]);
+  assert.equal(result.query.preferenceRequested, true);
+  assert.equal(result.query.preferenceConditions.strategy, "fast9");
+  assert.equal(result.retrievalPlan.structuredQueries[0].operation, "comps_rankings");
 });
