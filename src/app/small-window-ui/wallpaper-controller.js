@@ -129,11 +129,11 @@ export class WallpaperController {
     this.control = control;
     this.toggle = toggle;
     this.select = select;
-    this.mobileButton = control.querySelector("#wallpaper-mobile-button");
-    this.mobileMenu = control.querySelector("#wallpaper-mobile-menu");
-    this.mobileClose = control.querySelector("#wallpaper-mobile-close");
-    this.mobileToggle = control.querySelector("#wallpaper-mobile-toggle");
-    this.mobileOptions = control.querySelector("#wallpaper-mobile-options");
+    this.mobileButton = document.getElementById("wallpaper-mobile-button");
+    this.mobileMenu = document.getElementById("wallpaper-mobile-menu");
+    this.mobileClose = document.getElementById("wallpaper-mobile-close");
+    this.mobileToggle = document.getElementById("wallpaper-mobile-toggle");
+    this.mobileOptions = document.getElementById("wallpaper-mobile-options");
     this.idleMs = idleMs;
     this.idleTimer = null;
     this.particles = new ParticleField(canvas);
@@ -166,7 +166,7 @@ export class WallpaperController {
       this.setMobileMenuOpen(false);
     });
     document.addEventListener("click", (event) => {
-      if (!this.mobileMenu.hidden && !this.control.contains(event.target)) this.setMobileMenuOpen(false);
+      if (!this.mobileMenu.hidden && !this.mobileMenu.contains(event.target) && event.target !== this.mobileButton) this.setMobileMenuOpen(false);
     });
     this.handleActivity = () => this.registerActivity();
     document.addEventListener("keydown", (event) => {
