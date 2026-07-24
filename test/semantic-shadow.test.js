@@ -24,6 +24,9 @@ test("semantic shadow records sanitized differences without changing legacy outp
   assert.equal(JSON.stringify(events[0]).includes("霞的炼刀"), false);
   assert.equal(events[0].data.usage.cachedInputTokens > 0, true);
   assert.equal(events[0].data.difference.semantic.action, "compare");
+  assert.equal(result.capabilityMatch.status, "understood_and_supported");
+  assert.equal(result.taskPlanning.validation.valid, true);
+  assert.equal(events[0].data.taskPlan.planVersion, "task-plan.v1");
 });
 
 test("semantic shadow failure is isolated from the legacy chain", async () => {

@@ -151,6 +151,43 @@ test("ToolExecutor retries only recoverable idempotent failures within the run b
   assert.equal(nonIdempotentAttempts, 1);
 });
 
+test("ToolExecutor requires an idempotency key before retrying a side-effecting tool", async () => {
+  let withoutKey = 0;
+  const sideEffectDefinition = definition({
+    sideEffect: "external_write",
+    requiresApproval: true,
+    execute: async () => {
+      withoutKey += 1;
+      throw Object.assign(new Error("temporary"), { recoverable: true });
+    }
+  });
+  const executor = new ToolExecutor({ registry: new ToolRegistry([sideEffectDefinition]) });
+  await assert.rejects(() => executor.execute("test_tool", { value: 1 }, {
+    source: "test",
+    maxRetriesPerTool: 2
+  }));
+  assert.equal(withoutKey, 1);
+
+  let withKey = 0;
+  const keyedExecutor = new ToolExecutor({
+    registry: new ToolRegistry([definition({
+      sideEffect: "external_write",
+      requiresApproval: true,
+      execute: async ({ value }) => {
+        withKey += 1;
+        if (withKey === 1) throw Object.assign(new Error("temporary"), { recoverable: true });
+        return { value };
+      }
+    })])
+  });
+  const result = await keyedExecutor.execute("test_tool", { value: 1 }, {
+    source: "test",
+    maxRetriesPerTool: 1,
+    idempotencyKey: "request-1"
+  });
+  assert.equal(result.attempts, 2);
+});
+
 test("structured tool definitions derive from the existing operation allowlist without drift", () => {
   const definitions = createStructuredToolDefinitions();
   assert.deepEqual(
@@ -158,4 +195,5 @@ test("structured tool definitions derive from the existing operation allowlist w
     Object.keys(STRUCTURED_OPERATION_REGISTRY).sort()
   );
   assert.ok(definitions.every((entry) => entry.readOnly && entry.idempotent));
+  assert.ok(definitions.every((entry) => entry.capabilities.length > 0));
 });

@@ -1,7 +1,12 @@
 import { createAgentStateBar } from "./context-policy.js";
 import { parseSemanticTask } from "./semantic-task-parser.js";
+import { matchTaskCapabilities } from "./capability-matcher.js";
+import { createStructuredToolDefinitions } from "../agent/tools/definitions.js";
+import { ToolRegistry } from "../agent/tools/registry.js";
+import { planTask } from "../agent/task-planner.js";
 
 export const SEMANTIC_SHADOW_EVENT_VERSION = "semantic-shadow-event.v1";
+const DEFAULT_TOOL_REGISTRY = new ToolRegistry(createStructuredToolDefinitions());
 
 const LEGACY_ACTIONS = Object.freeze({
   unit_best_3_items: "recommend",
@@ -72,6 +77,20 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
       provider: options.provider,
       budget: options.budget
     });
+    const toolRegistry = options.toolRegistry ?? DEFAULT_TOOL_REGISTRY;
+    const capabilityMatch = matchTaskCapabilities(semanticResult.taskFrame, toolRegistry, {
+      compositeTools: options.compositeTools
+    });
+    const taskPlanning = await planTask(semanticResult.taskFrame, capabilityMatch, {
+      registry: toolRegistry,
+      planner: options.planner,
+      policyCheck: options.policyCheck,
+      budget: {
+        maxSteps: Math.min(3, Number(options.agentRun?.budget?.maxSteps ?? 3)),
+        maxToolCalls: Math.min(3, Number(options.agentRun?.budget?.maxToolCalls ?? 3)),
+        maxPlannerTokens: Number(options.plannerTokenBudget ?? 600)
+      }
+    });
     const difference = compareSemanticShadow(legacyParsed, semanticResult);
     const stateBar = createAgentStateBar({
       ...semanticResult.stateBar,
@@ -100,13 +119,23 @@ export async function runSemanticShadow(input, legacyParsed, options = {}) {
         difference,
         contextResolution: semanticResult.contextResolution,
         clarificationPolicy: semanticResult.clarificationPolicy,
+        capabilityMatch,
+        taskPlan: taskPlanning.plan,
+        taskPlanValidation: taskPlanning.validation,
         usage: semanticResult.telemetry.usage,
         parserBudget: semanticResult.telemetry.budget,
         exampleIds: semanticResult.telemetry.exampleIds,
         stateBar
       }
     });
-    return { status: "completed", semanticResult, difference, stateBar };
+    return {
+      status: "completed",
+      semanticResult,
+      difference,
+      stateBar,
+      capabilityMatch,
+      taskPlanning
+    };
   } catch (error) {
     safeEmit(options.agentRun, {
       type: "semantic_shadow_failed",

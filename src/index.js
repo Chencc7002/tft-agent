@@ -401,6 +401,10 @@ export {
   applyClarificationPolicy
 } from "./understanding/ambiguity-policy.js";
 export {
+  CAPABILITY_MATCH_VERSION,
+  matchTaskCapabilities
+} from "./understanding/capability-matcher.js";
+export {
   createRecommendationFromRows,
   recommendForInput,
   SESSION_LAST_QUERY_KEY
@@ -426,7 +430,10 @@ export {
   ToolExecutor,
   ToolRegistry,
   createStructuredToolDefinitions,
-  normalizeRunBudget
+  normalizeRunBudget,
+  TASK_PLAN_SCHEMA_VERSION,
+  planTask,
+  validateTaskPlan
 } from "./agent/index.js";
 
 export function planQuery(input, options = {}) {

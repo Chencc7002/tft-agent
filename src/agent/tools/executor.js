@@ -161,7 +161,13 @@ export class ToolExecutor {
             recoverable: Boolean(caught?.recoverable),
             cause: caught
           });
-        const canRetry = error.recoverable && definition.idempotent && attempts <= maxRetries;
+        const sideEffectRetrySafe = definition.sideEffect === "none"
+          || Boolean(context.idempotencyKey)
+          || error.confirmedNotSucceeded === true;
+        const canRetry = error.recoverable
+          && definition.idempotent
+          && sideEffectRetrySafe
+          && attempts <= maxRetries;
         if (canRetry) {
           context.run?.consumeRetry?.();
           continue;

@@ -29,3 +29,8 @@ export { ToolError } from "./tools/tool-errors.js";
 export { ToolExecutor } from "./tools/executor.js";
 export { createStructuredToolDefinitions } from "./tools/definitions.js";
 export { STRUCTURED_OPERATION_REGISTRY } from "../retrieval/structured-retriever.js";
+export {
+  TASK_PLAN_SCHEMA_VERSION,
+  planTask,
+  validateTaskPlan
+} from "./task-planner.js";
