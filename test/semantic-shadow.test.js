@@ -61,4 +61,14 @@ test("production recommendation path runs semantic shadow without changing the l
 
   assert.deepEqual(shadowed, baseline);
   assert.equal(events.some((event) => event.type === "semantic_shadow_completed"), true);
+
+  const routed = await recommendForInput("霞怎么出装", {
+    catalog,
+    useSession: false,
+    response: []
+  });
+  assert.ok(routed.agentRouting);
+  assert.ok(routed.agentTrace);
+  assert.equal(routed.agentRouting.route, "semantic");
+  assert.equal(Object.keys(routed).includes("agentRouting"), false);
 });

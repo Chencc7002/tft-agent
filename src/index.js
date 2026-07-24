@@ -432,6 +432,13 @@ export {
   createStructuredToolDefinitions,
   normalizeRunBudget,
   TASK_PLAN_SCHEMA_VERSION,
+  AGENT_TRACE_VERSION,
+  DEFAULT_PHASE6_ROLLOUT_POLICY,
+  TAKEOVER_ACTION_ORDER,
+  TAKEOVER_DECISION_VERSION,
+  createTakeoverDecision,
+  finalizeTakeoverTrace,
+  validateTakeoverPolicy,
   planTask,
   validateTaskPlan
 } from "./agent/index.js";

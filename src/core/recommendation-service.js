@@ -50,6 +50,10 @@ import { runSemanticShadow } from "../understanding/semantic-shadow.js";
 import { RetrievalPlanner } from "../retrieval/retrieval-planner.js";
 import { StructuredRetriever } from "../retrieval/structured-retriever.js";
 import { SUPPORTED_CONCLUSION_INTENTS } from "../llm/conclusion-spec-registry.js";
+import {
+  createTakeoverDecision,
+  finalizeTakeoverTrace
+} from "../agent/takeover-controller.js";
 
 export const SESSION_LAST_QUERY_KEY = "last_query";
 const RETRIEVAL_PLANNER = new RetrievalPlanner();
@@ -154,6 +158,64 @@ async function executePlannedStructuredQuery(plan, operation, handler, context =
   }
   const retriever = new StructuredRetriever({ handlers: { [operation]: handler } });
   return (await retriever.executeQuery(query, context)).value;
+}
+
+function semanticTakeoverDecision(shadowResult, retrievalPlan, options = {}) {
+  if (options.semanticTakeover === false || shadowResult?.status !== "completed") return null;
+  const decision = createTakeoverDecision({
+    taskFrame: shadowResult.semanticResult?.taskFrame,
+    clarificationPolicy: shadowResult.semanticResult?.clarificationPolicy,
+    capabilityMatch: shadowResult.capabilityMatch,
+    taskPlanning: shadowResult.taskPlanning,
+    shadowDifference: shadowResult.difference,
+    legacyTools: (retrievalPlan?.structuredQueries ?? []).map((query) => query.operation),
+    requestKey: options.semanticTakeoverKey
+      ?? options.sessionKey
+      ?? options.conversationId
+      ?? "default",
+    policy: options.semanticTakeoverPolicy
+  });
+  try {
+    options.agentRun?.emit?.({
+      type: "semantic_takeover_decided",
+      stage: "planning",
+      data: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        mode: decision.mode,
+        action: decision.action,
+        reason: decision.reason,
+        plannedTools: decision.plannedTools,
+        legacyTools: decision.legacyTools
+      }
+    });
+  } catch {
+    // Routing observability cannot alter deterministic execution.
+  }
+  return decision;
+}
+
+function attachSemanticTakeover(result, decision, outcome = {}) {
+  if (!decision) return result;
+  Object.defineProperties(result, {
+    agentRouting: {
+      enumerable: false,
+      value: {
+        schemaVersion: decision.schemaVersion,
+        route: decision.route,
+        mode: decision.mode,
+        action: decision.action,
+        reason: decision.reason,
+        plannedTools: decision.plannedTools,
+        legacyTools: decision.legacyTools
+      }
+    },
+    agentTrace: {
+      enumerable: false,
+      value: finalizeTakeoverTrace(decision, outcome)
+    }
+  });
+  return result;
 }
 
 function itemLabel(apiName, catalog) {
@@ -1494,8 +1556,9 @@ export async function recommendForInput(input, options = {}) {
   let deterministicParsed = parseQueryDeterministically(input, options, catalog);
   deterministicParsed = await applySemanticIntentHint(input, deterministicParsed, options);
   deterministicParsed = await applySemanticEntityHints(input, deterministicParsed, options, catalog);
+  let semanticShadowResult = null;
   if (semanticTaskPromise) {
-    await runSemanticShadow(input, deterministicParsed, {
+    semanticShadowResult = await runSemanticShadow(input, deterministicParsed, {
       parser: () => semanticTaskPromise,
       agentRun: options.agentRun
     });
@@ -1560,6 +1623,11 @@ export async function recommendForInput(input, options = {}) {
     if (!retrievalAudit.retrievalPlan || retrievalAudit.retrievalPlan.needsClarification) {
       throw new Error("A valid RetrievalPlan is required before structured retrieval");
     }
+    const semanticRouting = semanticTakeoverDecision(
+      semanticShadowResult,
+      retrievalAudit.retrievalPlan,
+      options
+    );
     const queryCacheKey = makeQueryCacheKey(query);
     let response = options.compResponse ?? options.response;
     let queryCache = { key: queryCacheKey, hit: false };
@@ -1741,6 +1809,15 @@ export async function recommendForInput(input, options = {}) {
       }
     };
     decorated.text = decorated.text ?? "";
+    attachSemanticTakeover(decorated, semanticRouting, {
+      toolStatus: queryCache.stale ? "degraded" : queryCache.hit ? "cache_hit" : "completed",
+      conclusionStatus: "completed",
+      failureLayer: queryCache.stale ? "tool" : null,
+      latencyMs: semanticShadowResult?.semanticResult?.telemetry?.durationMs ?? 0,
+      cachedInputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.cachedInputTokens ?? 0,
+      inputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.uncachedInputTokens ?? 0,
+      outputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.outputTokens ?? 0
+    });
     attachRetrievalAudit(decorated, input, catalog, retrievalAudit);
     return decorated;
   }
@@ -1926,6 +2003,11 @@ export async function recommendForInput(input, options = {}) {
   if (!finalRetrievalAudit.retrievalPlan || finalRetrievalAudit.retrievalPlan.needsClarification) {
     throw new Error("A valid RetrievalPlan is required before structured retrieval");
   }
+  const semanticRouting = semanticTakeoverDecision(
+    semanticShadowResult,
+    finalRetrievalAudit.retrievalPlan,
+    options
+  );
   const queryCacheKey = makeQueryCacheKey(validatedQuery);
   let queryCache = {
     key: queryCacheKey,
@@ -2060,5 +2142,14 @@ export async function recommendForInput(input, options = {}) {
     result.cache.session.writtenAt = sessionWrite.updatedAt;
   }
 
+  attachSemanticTakeover(result, semanticRouting, {
+    toolStatus: queryCache.stale ? "degraded" : queryCache.hit ? "cache_hit" : "completed",
+    conclusionStatus: "completed",
+    failureLayer: queryCache.stale ? "tool" : null,
+    latencyMs: semanticShadowResult?.semanticResult?.telemetry?.durationMs ?? 0,
+    cachedInputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.cachedInputTokens ?? 0,
+    inputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.uncachedInputTokens ?? 0,
+    outputTokens: semanticShadowResult?.semanticResult?.telemetry?.usage?.outputTokens ?? 0
+  });
   return attachRetrievalAudit(result, input, catalog, finalRetrievalAudit);
 }
